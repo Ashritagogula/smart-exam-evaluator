@@ -1,0 +1,43 @@
+.btn-gold {
+  background: linear-gradient(135deg, #f7941d, #e0820a);
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.btn-gold:hover { opacity: 0.9; }
+
+.btn-outline {
+  background: #fff;
+  color: #002366;
+  border: 1px solid #d0daf0;
+  padding: 7px 16px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.btn-outline:hover { border-color: #002366; background: #e8f1fb; }
+
+.btn-pill {
+  padding: 7px 18px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.btn-pill-active   { background: #f7941d; color: #fff; border: 1px solid #f7941d; }
+.btn-pill-inactive { background: #fff; color: #374a72; border: 1px solid #d0daf0; }
+.btn-pill-inactive:hover { border-color: #002366; }

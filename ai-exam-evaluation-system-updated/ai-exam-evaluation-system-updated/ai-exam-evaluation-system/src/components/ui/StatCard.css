@@ -1,0 +1,35 @@
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #d0daf0;
+  border-radius: 8px;
+  padding: 20px 22px;
+  border-top: 3px solid transparent;
+  box-shadow: 0 2px 8px rgba(0, 35, 102, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.stat-card-label {
+  font-size: 11px;
+  color: #6478a0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 8px;
+}
+.stat-card-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1a2744;
+  font-family: "Merriweather", serif;
+  line-height: 1;
+}
+.stat-card-sub {
+  font-size: 11px;
+  color: #6478a0;
+  margin-top: 5px;
+}
+.stat-card-icon {
+  padding: 10px;
+  border-radius: 6px;
+}

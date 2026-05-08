@@ -1,0 +1,198 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@700;900&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
+body {
+  font-family: "Source Sans 3", "Segoe UI", sans-serif;
+  background: #f0f4fb;
+  color: #1a2744;
+}
+
+button {
+  outline: none;
+  border: none;
+}
+
+/* STOP CLICK JUMP */
+button:active {
+  transform: translateY(0px); /* remove push */
+}
+
+/* KEEP SIZE SAME ALWAYS */
+button,
+input {
+  box-sizing: border-box;
+}
+
+.app-content.modal-open {
+  padding: 0 !important;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: #f0f4fb; }
+::-webkit-scrollbar-thumb  { background: #d0daf0; border-radius: 3px; }
+
+/* ── Layout ── */
+.app-shell   { display: flex; height: 100vh; overflow: hidden; }
+.app-main    { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.app-content { flex: 1; overflow: auto; padding: 24px 28px; }
+
+/* ── Animations ── */
+@keyframes fadeUp   { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes slideIn  { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+.page-anim { animation: fadeUp 0.35s ease both; }
+
+/* ── Grid helpers ── */
+.stats-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.grid-1-1    { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-2-1    { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3-2    { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; }
+.mb-16       { margin-bottom: 16px; }
+
+/* ── Form fields (shared) ── */
+.field-label { display: block; font-size: 11px; font-weight: 700; color: #6478a0; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.field-input { width: 100%; background: #f0f4fb; border: 1px solid #d0daf0; padding: 9px 12px; border-radius: 5px; font-size: 13px; font-family: inherit; color: #1a2744; }
+.field-input:focus { outline: none; border-color: #002366; }
+
+/* ── Notification toast ── */
+.notif {
+  position: fixed; top: 16px; right: 16px; z-index: 9999;
+  color: #fff; padding: 12px 22px; border-radius: 6px;
+  font-size: 13px; font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  display: flex; align-items: center; gap: 8px;
+  animation: slideIn 0.3s ease;
+}
+.notif-success { background: #0a8a4a; }
+.notif-error   { background: #c0392b; }
+
+/* ── Sheet row (Faculty dash) ── */
+.sheet-row      { display:flex; align-items:center; justify-content:space-between; padding:12px; background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; margin-bottom:8px; }
+.sheet-row-name { font-size:13px; font-weight:700; color:#1a2744; }
+.sheet-row-sub  { font-size:11px; color:#6478a0; }
+
+/* ── Score row ── */
+.score-row       { display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px solid #e8eef8; }
+.score-row-label { color:#6478a0; }
+.score-row-val   { font-weight:700; }
+
+/* ── Faculty row ── */
+.faculty-row    { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e8eef8; }
+.faculty-avatar { width:34px; height:34px; border-radius:50%; background:#002366; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; flex-shrink:0; }
+.faculty-name   { font-size:12px; font-weight:700; color:#1a2744; }
+.faculty-sub    { font-size:10px; color:#6478a0; }
+
+/* ── Result row (Student) ── */
+.result-row     { display:flex; align-items:center; justify-content:space-between; padding:12px; background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; margin-bottom:8px; }
+.result-subject { font-size:13px; font-weight:700; color:#1a2744; }
+.result-sub     { font-size:11px; color:#6478a0; }
+.result-grade   { font-family:"Merriweather",serif; font-size:20px; font-weight:900; }
+.result-pct     { font-size:10px; color:#6478a0; }
+
+/* ── Quick actions ── */
+.quick-actions-grid  { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.quick-action-btn    { background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; padding:14px 10px; cursor:pointer; text-align:center; transition:all 0.15s; }
+.quick-action-btn:hover { border-color:#002366; background:#e8f1fb; }
+.quick-action-label  { font-size:11px; font-weight:700; color:#1a2744; margin-top:7px; }
+
+/* ── Dept overview card ── */
+.dept-overview-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.dept-card          { background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; padding:14px; border-top:2px solid transparent; }
+.dept-card-code     { font-size:13px; font-weight:800; font-family:"Merriweather",serif; margin-bottom:6px; }
+.dept-card-info     { font-size:11px; color:#6478a0; margin-bottom:8px; }
+
+/* ── Principal perf cards ── */
+.dept-perf-grid    { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+.perf-card         { background:#f0f4fb; border:1px solid #d0daf0; border-radius:8px; padding:16px; text-align:center; border-top:3px solid transparent; }
+.perf-card-avg     { font-family:"Merriweather",serif; font-size:22px; font-weight:900; }
+.perf-card-sub     { font-size:10px; color:#6478a0; margin:3px 0 6px; }
+.perf-card-code    { font-size:13px; font-weight:800; color:#1a2744; }
+.perf-card-pass    { font-size:10px; color:#6478a0; margin-top:2px; }
+
+/* ── VC banner ── */
+.vc-banner        { background:#002366; border-radius:8px; padding:24px 28px; margin-bottom:20px; border-bottom:3px solid #f7941d; }
+.vc-banner-label  { font-size:10px; color:#f7941d; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:14px; }
+.vc-stats-grid    { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
+.vc-stat-value    { font-family:"Merriweather",serif; font-size:28px; font-weight:900; color:#f7941d; }
+.vc-stat-label    { font-size:11px; color:rgba(255,255,255,0.5); margin-top:2px; }
+
+/* ── Student banner ── */
+.student-banner      { background:#002366; border-radius:8px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; gap:20px; border-bottom:3px solid #f7941d; }
+.student-avatar-lg   { width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#f7941d,#e0820a); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; color:#fff; flex-shrink:0; }
+.student-banner-name { font-family:"Merriweather",serif; font-size:18px; font-weight:900; color:#fff; }
+.student-banner-sub  { font-size:11px; color:rgba(255,255,255,0.55); margin-top:2px; }
+.student-cgpa-val    { font-family:"Merriweather",serif; font-size:32px; font-weight:900; color:#f7941d; }
+
+/* ── Upload page ── */
+.upload-fields-grid  { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
+.drop-zone           { border:2px dashed #d0daf0; border-radius:8px; padding:44px; text-align:center; cursor:pointer; transition:all 0.2s; background:#f0f4fb; }
+.drop-zone.drag-active { border-color:#f7941d; background:#fff4e0; }
+.drop-icon           { width:48px; height:48px; border-radius:8px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
+.drop-title          { font-size:14px; font-weight:700; color:#1a2744; margin-bottom:4px; }
+.drop-sub            { font-size:12px; color:#6478a0; }
+.upload-progress-box { margin-top:16px; background:#f0f4fb; border-radius:6px; padding:14px 16px; border:1px solid #d0daf0; }
+.upload-progress-header { display:flex; justify-content:space-between; margin-bottom:8px; font-size:12px; font-weight:600; color:#1a2744; }
+.upload-track        { height:5px; background:#e8eef8; border-radius:100px; overflow:hidden; }
+.upload-fill         { height:100%; background:linear-gradient(90deg,#002366,#0077b6); border-radius:100px; transition:width 0.3s; }
+.upload-ai-msg       { font-size:11px; color:#0a8a4a; margin-top:8px; font-weight:600; }
+.recent-upload-row   { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e8eef8; }
+.recent-upload-icon  { background:#e8f1fb; padding:8px; border-radius:6px; border:1px solid #d0daf0; }
+.recent-upload-name  { font-size:13px; font-weight:600; color:#1a2744; }
+.recent-upload-sub   { font-size:11px; color:#6478a0; }
+
+/* ── Create exam ── */
+.create-exam-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+
+/* ── Departments page ── */
+.departments-grid  { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+.dept-full-card    { background:#fff; border:1px solid #d0daf0; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,35,102,0.05); }
+.dept-full-header  { padding:14px 18px; display:flex; justify-content:space-between; align-items:center; }
+.dept-full-code    { font-family:"Merriweather",serif; font-size:15px; font-weight:900; color:#fff; }
+.dept-full-body    { padding:16px 18px; }
+.dept-full-name    { font-size:13px; font-weight:700; color:#1a2744; margin-bottom:4px; }
+.dept-full-hod     { font-size:11px; color:#6478a0; margin-bottom:14px; }
+.dept-full-stats   { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.dept-stat-box     { background:#f0f4fb; border:1px solid #d0daf0; border-radius:5px; padding:10px; text-align:center; }
+.dept-stat-val     { font-family:"Merriweather",serif; font-size:18px; font-weight:900; color:#1a2744; }
+.dept-stat-label   { font-size:10px; color:#6478a0; }
+
+/* ── Analytics page ── */
+.analytics-agreement-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.analytics-agreement-card { background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; padding:16px; text-align:center; border-top:2px solid transparent; }
+.analytics-agreement-label{ font-size:11px; color:#374a72; margin-top:8px; font-weight:600; }
+
+/* ── Feedback page ── */
+.feedback-scores-grid    { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px; }
+.feedback-score-card     { background:#f0f4fb; border:1px solid #d0daf0; border-radius:6px; padding:14px; text-align:center; border-top:3px solid transparent; }
+.feedback-score-val      { font-family:"Merriweather",serif; font-size:22px; font-weight:900; }
+.feedback-score-label    { font-size:10px; color:#6478a0; margin-top:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+.feedback-analysis-grid  { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.feedback-box            { border-radius:6px; padding:14px; }
+.feedback-box-success    { background:#e6f7ef; border:1px solid #b7e4c9; }
+.feedback-box-danger     { background:#fdecea; border:1px solid #f5c2be; }
+.feedback-box-head       { font-size:12px; font-weight:800; margin-bottom:8px; }
+.feedback-point          { font-size:12px; color:#374a72; margin-bottom:5px; padding-left:8px; border-left:2px solid transparent; }
+.feedback-suggest        { background:#fff4e0; border:1px solid rgba(247,148,29,0.3); border-radius:6px; padding:14px; }
+.feedback-suggest-head   { font-size:12px; font-weight:800; color:#e0820a; margin-bottom:5px; }
+.feedback-suggest-text   { font-size:12px; color:#374a72; line-height:1.6; }
+
+/* ── au-table re-expose ── */
+.au-table { width:100%; border-collapse:collapse; }
+.au-table thead tr { background:#002366; }
+.au-table thead th { padding:10px 14px; text-align:left; font-size:11px; color:rgba(255,255,255,0.85); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap; }
+.au-table tbody tr { border-top:1px solid #e8eef8; }
+.au-table tbody tr.clickable { cursor:pointer; }
+.au-table tbody tr:hover { background:#e8f1fb; }
+.au-table tbody td { padding:11px 14px; font-size:13px; color:#374a72; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .grid-1-1, .grid-2-1, .grid-3-2 { grid-template-columns: 1fr; }
+  .dept-perf-grid { grid-template-columns: repeat(3,1fr); }
+  .vc-stats-grid  { grid-template-columns: repeat(2,1fr); }
+  .stats-bar-inner { grid-template-columns: repeat(2,1fr); }
+  .analytics-agreement-grid { grid-template-columns: repeat(2,1fr); }
+  .create-exam-grid { grid-template-columns: 1fr 1fr; }
+}

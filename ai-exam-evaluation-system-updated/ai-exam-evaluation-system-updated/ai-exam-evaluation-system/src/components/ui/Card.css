@@ -1,0 +1,42 @@
+.card {
+  background: #ffffff;
+  border: 1px solid #d0daf0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 35, 102, 0.05);
+}
+.card-header {
+  background: #002366;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.card-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.card-body { padding: 20px; }
+
+.divider { height: 1px; background: #e8eef8; margin: 16px 0; }
+
+/* Table */
+.au-table { width: 100%; border-collapse: collapse; }
+.au-table thead tr { background: #002366; }
+.au-table thead th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.au-table tbody tr { border-top: 1px solid #e8eef8; cursor: default; }
+.au-table tbody tr.clickable { cursor: pointer; }
+.au-table tbody tr:hover { background: #e8f1fb; }
+.au-table tbody td { padding: 11px 14px; font-size: 13px; color: #374a72; }
