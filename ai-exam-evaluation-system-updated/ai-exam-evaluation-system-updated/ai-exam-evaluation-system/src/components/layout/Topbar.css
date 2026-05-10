@@ -1,39 +1,212 @@
-.topbar {
-  height: 58px;
-  background: #002366;
-  display: flex; align-items: center;
-  justify-content: space-between;
-  padding: 0 28px; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+.topbar{
+  height:58px;
+  background:#002366;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 20px;
+  flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,0.18);
+  gap:12px;
+  overflow:hidden;
 }
-.topbar-title {
-  font-size: 15px; font-weight: 700;
-  color: #fff; font-family: "Merriweather", serif;
+
+.topbar-title{
+  font-size:13px;
+  font-weight:700;
+  color:#fff;
+  font-family:"Merriweather",serif;
+  line-height:1.2;
+  word-break:break-word;
 }
-.topbar-sub {
-  font-size: 11px; color: rgba(255,255,255,0.5);
+
+.topbar-sub{
+  font-size:9px;
+  color:rgba(255,255,255,0.55);
+  margin-top:2px;
+  line-height:1.4;
 }
-.topbar-right { display: flex; align-items: center; gap: 16px; }
-.topbar-bell  { position: relative; cursor: pointer; }
-.topbar-bell-dot {
-  position: absolute; top: -3px; right: -3px;
-  width: 7px; height: 7px;
-  background: #f7941d; border-radius: 50%;
-  border: 1px solid #002366;
+
+.topbar-right{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-shrink:0;
 }
-.topbar-user {
-  display: flex; align-items: center; gap: 9px;
-  background: rgba(255,255,255,0.1);
-  padding: 5px 12px 5px 5px;
-  border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.15);
+
+.topbar-bell{
+  position:relative;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
-.topbar-avatar {
-  width: 28px; height: 28px; border-radius: 4px;
-  background: linear-gradient(135deg, #f7941d, #e0820a);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: #fff;
+
+.topbar-bell-dot{
+  position:absolute;
+  top:-3px;
+  right:-3px;
+  width:7px;
+  height:7px;
+  background:#f7941d;
+  border-radius:50%;
+  border:1px solid #002366;
 }
-.topbar-user-name  { font-size: 12px; font-weight: 700; color: #fff; }
-.topbar-user-role  { font-size: 9px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.04em; }
-.topbar-gold-rule  { height: 3px; background: linear-gradient(90deg, #f7941d, #e0820a, transparent); flex-shrink: 0; }
+
+.topbar-user{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(255,255,255,0.1);
+  padding:5px 10px 5px 5px;
+  border-radius:6px;
+  border:1px solid rgba(255,255,255,0.15);
+  min-width:0;
+}
+
+.topbar-avatar{
+  width:28px;
+  aspect-ratio:1/1;
+  border-radius:4px;
+  background:linear-gradient(135deg,#f7941d,#e0820a);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:10px;
+  font-weight:800;
+  color:#fff;
+  flex-shrink:0;
+}
+
+.topbar-user-name{
+  font-size:11px;
+  font-weight:700;
+  color:#fff;
+  line-height:1.2;
+  white-space:nowrap;
+}
+
+.topbar-user-role{
+  font-size:8px;
+  color:rgba(255,255,255,0.55);
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  margin-top:1px;
+  white-space:nowrap;
+}
+
+.topbar-gold-rule{
+  height:3px;
+  background:linear-gradient(
+    90deg,
+    #f7941d,
+    #e0820a,
+    transparent
+  );
+  flex-shrink:0;
+}
+
+/* ================= RESPONSIVE ================= */
+
+@media(max-width:768px){
+
+  .topbar{
+    height:54px;
+    padding:0 14px 0 58px;
+  }
+
+  .topbar-title{
+    font-size:11px;
+  }
+
+  .topbar-sub{
+    font-size:7px;
+  }
+
+  .topbar-right{
+    gap:10px;
+  }
+
+  .topbar-user{
+    padding:4px 8px 4px 4px;
+    gap:6px;
+  }
+
+  .topbar-avatar{
+    width:24px;
+    font-size:9px;
+  }
+
+  .topbar-user-name{
+    font-size:9px;
+  }
+
+  .topbar-user-role{
+    font-size:7px;
+  }
+}
+
+@media(max-width:576px){
+
+  .topbar{
+    height:50px;
+    padding:0 10px 0 52px;
+  }
+
+  .topbar-title{
+    font-size:10px;
+  }
+
+  .topbar-sub{
+    font-size:6px;
+  }
+
+  .topbar-right{
+    gap:8px;
+  }
+
+  .topbar-user{
+    padding:3px 6px 3px 3px;
+  }
+
+  .topbar-avatar{
+    width:22px;
+    font-size:8px;
+  }
+
+  .topbar-user-name{
+    font-size:8px;
+  }
+
+  .topbar-user-role{
+    font-size:6px;
+  }
+}
+
+@media(max-width:420px){
+
+  .topbar{
+    padding:0 8px 0 48px;
+  }
+
+  .topbar-title{
+    font-size:9px;
+  }
+
+  .topbar-sub{
+    font-size:5px;
+  }
+
+  .topbar-user-name{
+    font-size:7px;
+  }
+
+  .topbar-user-role{
+    font-size:5px;
+  }
+
+  .topbar-avatar{
+    width:20px;
+    font-size:7px;
+  }
+}
