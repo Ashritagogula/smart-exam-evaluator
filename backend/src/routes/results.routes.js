@@ -7,7 +7,7 @@ import CIEMarks from "../models/CIEMarks.js";
 import LabMarks from "../models/LabMarks.js";
 import Student from "../models/Student.js";
 import AcademicYear from "../models/AcademicYear.js";
-import { getGrade } from "../services/marks.service.js";
+import { getGrade, applyRelativeGrading } from "../services/marks.service.js";
 
 const router = express.Router();
 router.use(authenticate);
@@ -110,6 +110,15 @@ router.post("/declare", authorize("ce", "admin"), asyncHandler(async (req, res) 
     { isDeclared: true, declaredAt: new Date() }
   );
   res.json({ message: "Results declared" });
+}));
+
+// Apply relative grading to all results for a subject
+router.post("/apply-relative-grading", authorize("examcell", "admin", "ce"), asyncHandler(async (req, res) => {
+  const { subjectId, academicYearId } = req.body;
+  if (!subjectId || !academicYearId)
+    return res.status(400).json({ message: "subjectId and academicYearId are required" });
+  const outcome = await applyRelativeGrading(subjectId, academicYearId);
+  res.json({ message: `Relative grading applied to ${outcome.updated} students`, ...outcome });
 }));
 
 // Analytics for a subject

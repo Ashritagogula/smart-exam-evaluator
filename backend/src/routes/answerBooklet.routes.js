@@ -4,6 +4,8 @@ import { authorize } from "../middleware/role.middleware.js";
 import { uploadBooklets } from "../middleware/upload.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import AnswerBooklet from "../models/AnswerBooklet.js";
+import AIEvaluation from "../models/AIEvaluation.js";
+import FacultyEvaluation from "../models/FacultyEvaluation.js";
 import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
@@ -29,6 +31,34 @@ router.get("/:id", asyncHandler(async (req, res) => {
     .populate("student subject examEvent assignedFaculty");
   if (!b) return res.status(404).json({ message: "Booklet not found" });
   res.json(b);
+}));
+
+// Script view — returns booklet details + evaluation data for student/faculty to view the script
+router.get("/:id/view", asyncHandler(async (req, res) => {
+  const b = await AnswerBooklet.findById(req.params.id)
+    .populate("student", "name rollNumber")
+    .populate("subject", "courseCode title")
+    .populate("assignedFaculty", "name employeeId");
+  if (!b) return res.status(404).json({ message: "Booklet not found" });
+
+  const [aiEval, facultyEval] = await Promise.all([
+    AIEvaluation.findOne({ booklet: b._id }).lean(),
+    FacultyEvaluation.findOne({ booklet: b._id }).lean(),
+  ]);
+
+  res.json({
+    _id:       b._id,
+    barcode:   b.barcode,
+    fileUrl:   b.fileUrl,
+    fileName:  b.fileName,
+    student:   b.student,
+    subject:   b.subject,
+    examType:  b.examType,
+    status:    b.status,
+    uploadDate: b.uploadDate,
+    aiEvaluation:      aiEval  || null,
+    facultyEvaluation: facultyEval || null,
+  });
 }));
 
 // Bulk upload by clerk

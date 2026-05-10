@@ -246,6 +246,7 @@ export const externalExam = {
   },
   dce: {
     getPending: (params = {}) => request(`/external-exam/dce/pending?${new URLSearchParams(params)}`),
+    getRandomSample: (params = {}) => request(`/external-exam/dce/random-sample?${new URLSearchParams(params)}`),
     review: (body) => request("/external-exam/dce/review", { method: "POST", body: JSON.stringify(body) }),
   },
   central: {
@@ -276,6 +277,20 @@ export const notifications = {
   markAllRead: (studentId) => request(`/notifications/student/${studentId}/read-all`, { method: "PUT" }),
 };
 
+// ─── SCRIPT VIEW ──────────────────────────────────────────────────────────────
+
+export const scriptView = {
+  getInternalBooklet: (id) => request(`/answer-booklets/${id}/view`),
+  listByStudent: (studentId) => request(`/answer-booklets?student=${studentId}`),
+  listByFaculty: (facultyId) => request(`/answer-booklets?faculty=${facultyId}`),
+};
+
+// ─── AUDIT LOGS ───────────────────────────────────────────────────────────────
+
+export const auditLogs = {
+  list: (params = {}) => request(`/audit-logs?${new URLSearchParams(params)}`),
+};
+
 // ─── OCR ──────────────────────────────────────────────────────────────────────
 
 export const ocr = {
@@ -302,5 +317,5 @@ export default {
   auth, colleges, regulations, academicYears, departments, semesters,
   subjects, sections, students, faculty, examEvents, questionPapers,
   evaluationSchemas, answerBooklets, internalEval, cieMarks, labMarks,
-  externalExam, results, notifications, ocr, dashboard, health,
+  externalExam, results, notifications, scriptView, auditLogs, ocr, dashboard, health,
 };

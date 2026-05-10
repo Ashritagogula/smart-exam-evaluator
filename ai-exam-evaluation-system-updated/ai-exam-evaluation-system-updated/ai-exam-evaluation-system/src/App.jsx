@@ -34,6 +34,7 @@ import CoordinatorDashboard from "./pages/dashboards/CoordinatorDashboard";
 import ScrutinizerDashboard from "./pages/dashboards/ScrutinizerDashboard";
 import ChairmanDashboard from "./pages/dashboards/ChairmanDashboard";
 import HODFacultyPage from "./pages/HODFacultyPage";
+import ScriptViewPage from "./pages/ScriptViewPage";
 
 import { auth } from "./services/api.js";
 import "./index.css";
@@ -55,7 +56,7 @@ const Dashboard = ({ role, onNav, setEvalModal, sec, user }) => {
   if (role === "hod")       return <HODDashboard user={user} />;
   if (role === "principal") return <PrincipalDashboard user={user} />;
   if (role === "vc")        return <VCDashboard user={user} />;
-  if (role === "student")   return <StudentDashboard user={user} />;
+  if (role === "student")   return <StudentDashboard user={user} onNav={onNav} />;
   if (role === "dce")       return <DCEDashboard sec={sec} user={user} />;
   if (role === "ce")        return <CEDashboard  sec={sec} user={user} />;
   if (role === "clerk")     return <ClerkDashboard user={user} />;
@@ -100,7 +101,8 @@ const PageRouter = ({
   if (sec === "setup")     return role === "admin" ? <AdminSetupPage user={user} /> : null;
   if (sec === "colleges")  return role === "admin" ? <CollegesPage user={user} /> : null;
   if (sec === "examusers") return <ManageUsersPage user={user} />;
-  if (sec === "cie")       return <CIEMarksPage user={user} />;
+  if (sec === "cie")         return <CIEMarksPage user={user} />;
+  if (sec === "my_scripts")  return <ScriptViewPage user={user} />;
 
   return (
     <div style={{ textAlign:"center", paddingTop:"60px", color:"#6478a0" }}>
@@ -171,24 +173,40 @@ export default function App() {
     setTimeout(() => setNotif(null), 3200);
   };
 
-  const doUpload = (formData, onProgress) => {
-    setUploadPct(0);
-    // Simulate progress while actual upload happens
-    const t = setInterval(() => {
-      setUploadPct((p) => {
-        if (p >= 90) { clearInterval(t); return 90; }
-        return Math.min(p + Math.random() * 14, 90);
-      });
-    }, 280);
+  const doUpload = (formData) => {
+    return new Promise((resolve, reject) => {
+      const token = localStorage.getItem("au_token");
+      const xhr = new XMLHttpRequest();
 
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        clearInterval(t);
-        setUploadPct(100);
-        setTimeout(() => setUploadPct(null), 1800);
-        toast("Answer sheets uploaded! AI evaluation initiated.");
-        resolve();
-      }, 2000);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadPct(Math.round((e.loaded / e.total) * 95));
+        }
+      };
+
+      xhr.onload = () => {
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch {}
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadPct(100);
+          setTimeout(() => setUploadPct(null), 1800);
+          toast("Answer sheets uploaded! AI evaluation initiated.");
+          resolve(data);
+        } else {
+          setUploadPct(null);
+          reject(new Error(data.message || `Upload failed (${xhr.status})`));
+        }
+      };
+
+      xhr.onerror = () => {
+        setUploadPct(null);
+        reject(new Error("Network error during upload"));
+      };
+
+      setUploadPct(0);
+      xhr.open("POST", "/api/answer-booklets/upload-bulk");
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.send(formData);
     });
   };
 

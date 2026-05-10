@@ -14,8 +14,16 @@ const validate = (req, res, next) => {
   next();
 };
 
-const collegeValidators = [
+const collegeCreateValidators = [
   body("name").trim().notEmpty().withMessage("College name is required"),
+  body("code").optional().trim().notEmpty().withMessage("College code must not be blank"),
+  body("location").optional().trim(),
+  body("type").optional().isIn(["Engineering", "Arts", "Science", "Medicine", "Law", "Other"]).withMessage("Invalid college type"),
+];
+
+// For updates (including role-only patches) every field is optional
+const collegeUpdateValidators = [
+  body("name").optional().trim().notEmpty().withMessage("College name must not be blank"),
   body("code").optional().trim().notEmpty().withMessage("College code must not be blank"),
   body("location").optional().trim(),
   body("type").optional().isIn(["Engineering", "Arts", "Science", "Medicine", "Law", "Other"]).withMessage("Invalid college type"),
@@ -43,13 +51,14 @@ router.get("/:id", asyncHandler(async (req, res) => {
   res.json(college);
 }));
 
-router.post("/", authorize("admin"), collegeValidators, validate, asyncHandler(async (req, res) => {
+router.post("/", authorize("admin"), collegeCreateValidators, validate, asyncHandler(async (req, res) => {
   const college = await College.create({ ...req.body, createdBy: req.user._id });
   res.status(201).json(college);
 }));
 
-router.put("/:id", authorize("admin"), collegeValidators, validate, asyncHandler(async (req, res) => {
-  const college = await College.findByIdAndUpdate(req.params.id, req.body, { new: true });
+router.put("/:id", authorize("admin"), collegeUpdateValidators, validate, asyncHandler(async (req, res) => {
+  const college = await College.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: false });
+  if (!college) return res.status(404).json({ message: "College not found" });
   res.json(college);
 }));
 

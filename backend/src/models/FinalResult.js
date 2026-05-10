@@ -19,6 +19,9 @@ const finalResultSchema = new mongoose.Schema({
   isAbsent: { type: Boolean, default: false },
   isDeclared: { type: Boolean, default: false },
   declaredAt: { type: Date },
+  relativeGradingApplied: { type: Boolean, default: false },
+  classMean:   { type: Number },
+  classStdDev: { type: Number },
 }, { timestamps: true });
 
 finalResultSchema.index({ student: 1, subject: 1 }, { unique: true });

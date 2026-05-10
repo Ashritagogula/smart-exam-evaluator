@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  answerBooklets as bookletsApi,
+  answerBooklets as bookletsApi,  // used for list() in recentUploads
   colleges as collegesApi,
   regulations as regulationsApi,
   departments as departmentsApi,
@@ -833,30 +833,21 @@ const UploadPage = ({ doUpload, uploadPct }) => {
 
   const submitUpload = async () => {
     if (!selectedFiles.length) return;
-
     setUploading(true);
 
     const formData = new FormData();
-
-    selectedFiles.forEach((file) => {
-      formData.append("booklets", file);
-    });
-
+    selectedFiles.forEach((file) => formData.append("booklets", file));
     formData.append(
       "examType",
       examType === "Mid-1" ? "IE1" : examType === "Mid-2" ? "IE2" : "IE1",
     );
 
     try {
-      await bookletsApi.uploadBulk(formData);
-
-      doUpload();
-
-      // Clear selected files after upload
+      await doUpload(formData);
       setSelectedFiles([]);
     } catch (err) {
       console.error(err);
-      alert("Upload failed");
+      alert("Upload failed: " + err.message);
     } finally {
       setUploading(false);
     }

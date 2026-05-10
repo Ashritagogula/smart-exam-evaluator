@@ -387,10 +387,10 @@ function GenerateRandomSection({ dceNotifications, setDceNotifications }) {
     setBooklets([]);
     setSelBk(null);
     try {
-      const data = await externalExam.dce.getPending({ subjectId: selSubj._id, count: sampleN });
+      const data = await externalExam.dce.getRandomSample({ subjectId: selSubj._id, count: sampleN });
       setBooklets(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("dce.getPending error:", err);
+      console.error("dce.getRandomSample error:", err);
     } finally {
       setLoadingBkls(false);
     }

@@ -25,6 +25,7 @@ import resultsRoutes from "./routes/results.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import ocrRoutes from "./routes/ocr.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import auditLogRoutes from "./routes/auditLog.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +67,7 @@ app.use("/api/results",           resultsRoutes);
 app.use("/api/notifications",     notificationRoutes);
 app.use("/api/ocr",               ocrRoutes);
 app.use("/api/dashboard",         dashboardRoutes);
+app.use("/api/audit-logs",        auditLogRoutes);
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date() }));
 

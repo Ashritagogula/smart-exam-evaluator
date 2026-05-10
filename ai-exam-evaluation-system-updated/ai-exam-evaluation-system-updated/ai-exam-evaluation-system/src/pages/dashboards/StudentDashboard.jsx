@@ -8,7 +8,7 @@ import { dashboard as dashboardApi, results as resultsApi, notifications as noti
 
 const GRADE_COLOR = { O:"#0a8a4a", "A+":"#0a8a4a", A:"#0077b6", "B+":"#0077b6", B:"#002366", C:"#e0820a", D:"#e0820a", F:"#c0392b" };
 
-const StudentDashboard = ({ user }) => {
+const StudentDashboard = ({ user, onNav }) => {
   const [stats,         setStats]    = useState(null);
   const [results,       setResults]  = useState([]);
   const [notifications, setNotifs]   = useState([]);
@@ -114,6 +114,24 @@ const StudentDashboard = ({ user }) => {
             <div style={{ padding:"12px", color:"#6478a0", fontSize:13 }}>No declared results to chart yet.</div>
           )}
         </Card>
+      </div>
+
+      {/* Quick action — View Answer Scripts */}
+      <div style={{ marginTop:16, background:"#fff", border:"1px solid #d0daf0", borderRadius:12, padding:"14px 18px",
+        display:"flex", justifyContent:"space-between", alignItems:"center", boxShadow:"0 2px 8px rgba(0,35,102,0.05)" }}>
+        <div>
+          <div style={{ fontWeight:700, fontSize:14, color:"#1a2744" }}>View My Answer Scripts</div>
+          <div style={{ fontSize:12, color:"#6478a0", marginTop:2 }}>
+            Access your scanned booklets and see AI + faculty evaluation details.
+          </div>
+        </div>
+        <button onClick={() => onNav && onNav("my_scripts")} style={{
+          background:"linear-gradient(135deg,#002366,#0077b6)", color:"#fff",
+          border:"none", borderRadius:8, padding:"9px 20px", fontSize:13,
+          fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+        }}>
+          View Scripts →
+        </button>
       </div>
 
       {notifications.length > 0 && (
