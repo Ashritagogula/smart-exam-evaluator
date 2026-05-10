@@ -6,12 +6,8 @@ const NAV_MAP = {
 
   examcell:  [
     ["dashboard","home","Dashboard"],
-    ["colleges","dept","Colleges"],
     ["examusers","users","Manage Users"],
-    ["exams","exam","Manage Exams"]
-    // ["upload","upload","Upload Sheets"],
-    // ["assignments","users","Faculty Assign"],
-    // ["results","star","Publish Results"]
+    ["exams","exam","Manage Exams"],
   ],
 
   faculty:   [["dashboard","home","Dashboard"],["assigned","exam","Assigned Sheets"],["evaluate","edit","Evaluate"],["labs","lab","Labs"],["cie","star","CIE Marks"],["analytics","chart","Analytics"]],

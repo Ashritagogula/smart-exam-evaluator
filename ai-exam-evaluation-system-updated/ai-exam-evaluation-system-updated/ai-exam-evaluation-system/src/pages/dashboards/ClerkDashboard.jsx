@@ -7,7 +7,7 @@ import Badge from "../../components/ui/Badge";
 import Breadcrumb from "../../components/layout/Breadcrumb";
 import Icon from "../../components/ui/Icon";
 import C from "../../constants/colors";
-import { faculty as facultyApi, students, answerBooklets, internalEval, externalExam as extApi, examEvents as examEventsApi } from "../../services/api";
+import { faculty as facultyApi, students, answerBooklets, internalEval, externalExam as extApi, examEvents as examEventsApi, departments as departmentsApi, sections as sectionsApi } from "../../services/api";
 
 // ── Helper: map raw API booklet → UI sheet shape ──────────────────────────────
 const mapBooklet = (b) => ({
@@ -990,9 +990,15 @@ const ClerkDashboard = () => {
   const [loadingSheets,   setLoadingSheets]   = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingFaculty,  setLoadingFaculty]  = useState(true);
+  const [loadingMappings, setLoadingMappings] = useState(false);
   const [aiTriggerLoading,setAiTriggerLoading]= useState(false);
   const [actLog,          setActLog]          = useState([]);
-  const [toast,           setToast]           = useState(null); // { message, type }
+  const [toast,           setToast]           = useState(null);
+  const [deptList,        setDeptList]        = useState([]);
+  const [sectionList,     setSectionList]     = useState([]);
+  const [selDept,         setSelDept]         = useState("");
+  const [selSection,      setSelSection]      = useState("");
+  const [selSectionName,  setSelSectionName]  = useState("");
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -1034,34 +1040,80 @@ const ClerkDashboard = () => {
     }
   }, [showToast]);
 
-  // ── Fetch faculty (internal + external) ───────────────────────────────────
+  // ── Fetch external faculty only (internal comes from section mappings) ────
   const fetchFaculty = useCallback(async () => {
     setLoadingFaculty(true);
     try {
-      const [internalRaw, externalRaw] = await Promise.all([
-        facultyApi.list(),
-        facultyApi.list({ role: "external" }),
-      ]);
-      const internalList = Array.isArray(internalRaw) ? internalRaw : internalRaw.faculty || internalRaw.data || [];
+      const externalRaw = await facultyApi.list({ role: "external" });
       const externalList = Array.isArray(externalRaw) ? externalRaw : externalRaw.faculty || externalRaw.data || [];
-      setFacultyPool({
-        internal: internalList.map(mapFaculty),
-        external: externalList.map(mapFaculty),
-      });
+      setFacultyPool((prev) => ({ ...prev, external: externalList.map(mapFaculty) }));
     } catch (err) {
-      console.error("Failed to load faculty:", err);
+      console.error("Failed to load external faculty:", err);
       showToast(`Failed to load faculty: ${err.message}`, "error");
     } finally {
       setLoadingFaculty(false);
     }
   }, [showToast]);
 
-  // ── On mount: load all data ───────────────────────────────────────────────
+  // ── Fetch internal faculty from FacultySubjectMapping for selected section ─
+  const fetchMappingFaculty = useCallback(async (sectionId) => {
+    if (!sectionId) {
+      setFacultyPool((prev) => ({ ...prev, internal: [] }));
+      return;
+    }
+    setLoadingMappings(true);
+    try {
+      const mappings = await facultyApi.getAllMappings({ section: sectionId });
+      const list = Array.isArray(mappings) ? mappings : mappings.data || [];
+      const seen = new Set();
+      const unique = [];
+      list.forEach((m) => {
+        if (!m.faculty || seen.has(m.faculty._id)) return;
+        seen.add(m.faculty._id);
+        const subjectsTaught = list
+          .filter((x) => x.faculty?._id === m.faculty._id && x.subject)
+          .map((x) => x.subject.title || x.subject.courseCode || "")
+          .filter(Boolean);
+        unique.push({
+          id:       m.faculty._id,
+          name:     m.faculty.name,
+          dept:     m.faculty.department?.code || m.faculty.department?.name || "",
+          subjects: subjectsTaught,
+        });
+      });
+      setFacultyPool((prev) => ({ ...prev, internal: unique }));
+    } catch (err) {
+      console.error("Failed to load section faculty mappings:", err);
+      showToast(`Failed to load section faculty: ${err.message}`, "error");
+    } finally {
+      setLoadingMappings(false);
+    }
+  }, [showToast]);
+
+  // ── On mount: load booklets, students, external faculty, departments ──────
   useEffect(() => {
     fetchSheets();
     fetchStudents();
     fetchFaculty();
+    departmentsApi.list()
+      .then((d) => setDeptList(Array.isArray(d) ? d : d.data || []))
+      .catch(() => {});
   }, [fetchSheets, fetchStudents, fetchFaculty]);
+
+  // ── When dept changes → reload sections, reset section ───────────────────
+  useEffect(() => {
+    if (!selDept) { setSectionList([]); setSelSection(""); setSelSectionName(""); return; }
+    sectionsApi.list({ department: selDept })
+      .then((d) => setSectionList(Array.isArray(d) ? d : d.data || []))
+      .catch(() => setSectionList([]));
+    setSelSection("");
+    setSelSectionName("");
+  }, [selDept]);
+
+  // ── When section changes → load mapped faculty for that section ───────────
+  useEffect(() => {
+    fetchMappingFaculty(selSection);
+  }, [selSection, fetchMappingFaculty]);
 
   // ── Flat faculty name lookup map (id → name) ──────────────────────────────
   const allFacultyMap = useMemo(() => {
@@ -1214,49 +1266,153 @@ const ClerkDashboard = () => {
 
       {mode === "internal" && (
         <>
-          {/* ── Loading banner ── */}
-          {isInitialLoading && (
-            <div style={{
-              background: C.blueLight, border: `1px solid ${C.border}`,
-              borderRadius: "8px", padding: "20px", textAlign: "center",
-              marginBottom: "20px",
-            }}>
-              <p style={{ fontSize: "14px", color: C.navy, fontWeight: 600 }}>
-                Fetching data...
+          {/* ── Section Picker ── */}
+          <Card title="Select Section for Internal Evaluation"
+            style={{ marginBottom: "16px", borderTop: `3px solid ${C.navy}` }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "14px", alignItems: "flex-end" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 700,
+                  color: C.textMuted, textTransform: "uppercase",
+                  letterSpacing: "0.06em", marginBottom: "5px" }}>
+                  Department
+                </label>
+                <select value={selDept} onChange={(e) => setSelDept(e.target.value)}
+                  style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`,
+                    padding: "9px 10px", borderRadius: "5px", fontSize: "13px",
+                    color: C.text, outline: "none" }}>
+                  <option value="">All Departments</option>
+                  {deptList.map((d) => (
+                    <option key={d._id} value={d._id}>{d.name} ({d.code})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 700,
+                  color: C.textMuted, textTransform: "uppercase",
+                  letterSpacing: "0.06em", marginBottom: "5px" }}>
+                  Section <span style={{ color: C.gold }}>*</span>
+                </label>
+                <select value={selSection}
+                  onChange={(e) => {
+                    const opt = sectionList.find((s) => s._id === e.target.value);
+                    setSelSection(e.target.value);
+                    setSelSectionName(opt ? `${opt.name}${opt.semester ? ` — Sem ${opt.semester.number}` : ""}` : "");
+                  }}
+                  disabled={!selDept}
+                  style={{ width: "100%", background: selDept ? C.bg : C.borderLight,
+                    border: `1px solid ${C.border}`, padding: "9px 10px",
+                    borderRadius: "5px", fontSize: "13px", color: C.text,
+                    outline: "none", cursor: selDept ? "pointer" : "not-allowed" }}>
+                  <option value="">{selDept ? "Select Section" : "Select department first"}</option>
+                  {sectionList.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.name}{s.semester ? ` — Sem ${s.semester.number}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selSection && (
+                <button onClick={() => { setSelDept(""); setSelSection(""); setSelSectionName(""); }}
+                  style={{ background: "transparent", border: `1px solid ${C.border}`,
+                    color: C.textMid, borderRadius: "5px", padding: "9px 14px",
+                    fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    whiteSpace: "nowrap" }}>
+                  Clear
+                </button>
+              )}
+            </div>
+            {selSection && (
+              <div style={{ marginTop: "12px", background: loadingMappings ? C.bg : C.blueLight,
+                border: `1px solid ${C.border}`, borderRadius: "6px",
+                padding: "10px 14px", display: "flex", alignItems: "center",
+                gap: "12px", flexWrap: "wrap" }}>
+                {loadingMappings ? (
+                  <span style={{ fontSize: "12px", color: C.textMuted, fontStyle: "italic" }}>
+                    Loading mapped faculty for section…
+                  </span>
+                ) : (
+                  <>
+                    <Icon name="users" size={14} color={C.navy} />
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: C.navy }}>
+                      {selSectionName}
+                    </span>
+                    <span style={{ fontSize: "12px", color: C.textMuted }}>
+                      {facultyPool.internal.length === 0
+                        ? "No faculty mapped to this section. Assign faculty via HOD portal first."
+                        : `${facultyPool.internal.length} faculty mapped to this section`}
+                    </span>
+                    {facultyPool.internal.length > 0 && (
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        {facultyPool.internal.map((f) => (
+                          <Badge key={f.id} text={f.name} type="info" />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {!selSection ? (
+            <div style={{ background: C.blueLight, border: `1px solid ${C.border}`,
+              borderRadius: "8px", padding: "32px", textAlign: "center", marginBottom: "16px" }}>
+              <Icon name="users" size={32} color={C.border} />
+              <p style={{ fontSize: "14px", color: C.navy, fontWeight: 600, marginTop: "12px" }}>
+                Select a Section to Begin
               </p>
-              <p style={{ fontSize: "12px", color: C.textMuted, marginTop: "4px" }}>
-                Loading answer booklets, students, and faculty from the server.
+              <p style={{ fontSize: "12px", color: C.textMuted, marginTop: "6px", maxWidth: "380px", margin: "8px auto 0" }}>
+                Choose a department and section above. The faculty pool for internal evaluation
+                will automatically load from the HOD's faculty-subject mappings for that section.
               </p>
             </div>
+          ) : (
+            <>
+              {/* ── Loading banner ── */}
+              {isInitialLoading && (
+                <div style={{
+                  background: C.blueLight, border: `1px solid ${C.border}`,
+                  borderRadius: "8px", padding: "20px", textAlign: "center",
+                  marginBottom: "20px",
+                }}>
+                  <p style={{ fontSize: "14px", color: C.navy, fontWeight: 600 }}>
+                    Fetching data...
+                  </p>
+                  <p style={{ fontSize: "12px", color: C.textMuted, marginTop: "4px" }}>
+                    Loading answer booklets, students, and faculty from the server.
+                  </p>
+                </div>
+              )}
+
+              {/* ── Stats ── */}
+              <div style={{ display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                gap: "16px", marginBottom: "20px" }}>
+                <MiniStat label="Total Sheets"  value={counts.total}    color={C.navy}    icon="file"  />
+                <MiniStat label="Unmapped"      value={counts.unmapped} color={C.danger}  icon="edit"  sub="Need barcode mapping" />
+                <MiniStat label="Assigned"      value={counts.assigned} color={C.blue}    icon="users" sub="With faculty" />
+                <MiniStat label="AI Triggered"  value={counts.ai_sent}  color={C.success} icon="ai"    sub="In evaluation" />
+              </div>
+
+              {/* ── Four workflow sections ── */}
+              <UploadSection onUploadDone={handleUploadDone} />
+              <BarcodeSection sheets={sheets} onMap={handleMap} studentsList={studentsList} />
+              <AssignSection
+                sheets={sheets}
+                onAssign={handleAssign}
+                onBulkAssigned={handleBulkAssigned}
+                facultyPool={facultyPool}
+                assignLoading={loadingFaculty || loadingMappings}
+                showToast={showToast}
+              />
+              <StatusSection
+                sheets={sheets}
+                allFacultyMap={allFacultyMap}
+                onTriggerAI={handleTriggerAI}
+                aiTriggerLoading={aiTriggerLoading}
+              />
+            </>
           )}
-
-          {/* ── Stats ── */}
-          <div style={{ display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
-            gap: "16px", marginBottom: "20px" }}>
-            <MiniStat label="Total Sheets"  value={counts.total}    color={C.navy}    icon="file"  />
-            <MiniStat label="Unmapped"      value={counts.unmapped} color={C.danger}  icon="edit"  sub="Need barcode mapping" />
-            <MiniStat label="Assigned"      value={counts.assigned} color={C.blue}    icon="users" sub="With faculty" />
-            <MiniStat label="AI Triggered"  value={counts.ai_sent}  color={C.success} icon="ai"    sub="In evaluation" />
-          </div>
-
-          {/* ── Four workflow sections ── */}
-          <UploadSection onUploadDone={handleUploadDone} />
-          <BarcodeSection sheets={sheets} onMap={handleMap} studentsList={studentsList} />
-          <AssignSection
-            sheets={sheets}
-            onAssign={handleAssign}
-            onBulkAssigned={handleBulkAssigned}
-            facultyPool={facultyPool}
-            assignLoading={loadingFaculty}
-            showToast={showToast}
-          />
-          <StatusSection
-            sheets={sheets}
-            allFacultyMap={allFacultyMap}
-            onTriggerAI={handleTriggerAI}
-            aiTriggerLoading={aiTriggerLoading}
-          />
         </>
       )}
 

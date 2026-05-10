@@ -12,6 +12,7 @@ const collegeSchema = new mongoose.Schema({
   principal:     { type: mongoose.Schema.Types.ObjectId, ref: "Faculty" },
   examCellAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "Faculty" },
   ce:            { type: mongoose.Schema.Types.ObjectId, ref: "Faculty" },
+  clerk:         { type: mongoose.Schema.Types.ObjectId, ref: "Faculty" },
   isActive: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });

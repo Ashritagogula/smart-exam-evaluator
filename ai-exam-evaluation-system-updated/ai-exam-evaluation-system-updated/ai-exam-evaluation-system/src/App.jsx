@@ -33,6 +33,7 @@ import ExternalDashboard from "./pages/dashboards/ExternalDashboard";
 import CoordinatorDashboard from "./pages/dashboards/CoordinatorDashboard";
 import ScrutinizerDashboard from "./pages/dashboards/ScrutinizerDashboard";
 import ChairmanDashboard from "./pages/dashboards/ChairmanDashboard";
+import HODFacultyPage from "./pages/HODFacultyPage";
 
 import { auth } from "./services/api.js";
 import "./index.css";
@@ -94,9 +95,10 @@ const PageRouter = ({
   if (sec === "results")   return <ResultsPage toast={toast} role={role} user={user} />;
   if (sec === "feedback")  return <FeedbackPage user={user} />;
   if (sec === "departments" || sec === "department") return <DepartmentsPage user={user} />;
+  if (sec === "faculty" && role === "hod") return <HODFacultyPage user={user} />;
   if (sec === "analytics") return <AnalyticsPage user={user} />;
-  if (sec === "setup")     return <AdminSetupPage user={user} />;
-  if (sec === "colleges")  return <CollegesPage user={user} />;
+  if (sec === "setup")     return role === "admin" ? <AdminSetupPage user={user} /> : null;
+  if (sec === "colleges")  return role === "admin" ? <CollegesPage user={user} /> : null;
   if (sec === "examusers") return <ManageUsersPage user={user} />;
   if (sec === "cie")       return <CIEMarksPage user={user} />;
 

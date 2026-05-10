@@ -11,10 +11,16 @@ const DepartmentsPage = ({ user }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    deptsApi.list()
+    const isHOD = user?.role === "hod";
+    const hodDeptId = user?.profile?.department?._id || user?.profile?.department;
+
+    const fetchDepts = isHOD && hodDeptId
+      ? deptsApi.get(hodDeptId).then(d => [d])
+      : deptsApi.list();
+
+    fetchDepts
       .then(async ds => {
         setDepts(ds);
-        // Fetch student/faculty counts per department in parallel
         const results = await Promise.all(
           ds.map(d => Promise.all([
             studentsApi.list({ department: d._id }).then(s => s.length).catch(() => 0),
@@ -29,12 +35,17 @@ const DepartmentsPage = ({ user }) => {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
+
+  const isHOD = user?.role === "hod";
+  const crumb = isHOD
+    ? ["HOD", user?.profile?.department?.name || "My Department"]
+    : ["Admin", "Departments"];
 
   if (loading) {
     return (
       <div className="page-anim">
-        <Breadcrumb items={["Admin", "Departments"]} />
+        <Breadcrumb items={crumb} />
         <div style={{ textAlign:"center", padding:"40px", color:"#6478a0" }}>Loading departments...</div>
       </div>
     );
@@ -42,7 +53,7 @@ const DepartmentsPage = ({ user }) => {
 
   return (
     <div className="page-anim">
-      <Breadcrumb items={["Admin", "Departments"]} />
+      <Breadcrumb items={crumb} />
       {depts.length === 0 ? (
         <div style={{ textAlign:"center", padding:"40px", color:"#6478a0" }}>
           No departments found. Add departments from the admin panel.

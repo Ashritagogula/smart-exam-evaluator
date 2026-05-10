@@ -14,8 +14,10 @@ A full React.js frontend for the AI-powered answer sheet evaluation platform, th
 src/
 ├── constants/
 │   ├── colors.js          # AU color palette
-│   ├── icons.js           # SVG path strings
-│   └── mockData.js        # Demo data (students, faculty, exams, sheets)
+│   └── icons.js           # SVG path strings
+│
+├── services/
+│   └── api.js             # Centralized API client (all backend calls)
 │
 ├── components/
 │   ├── ui/
@@ -62,13 +64,26 @@ src/
 ## Quick Start
 
 ```bash
+# 1. Copy the environment template and set your backend URL
+cp .env.example .env
+# Edit .env → set VITE_API_URL to your backend host
+
+# 2. Install and run
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 — select any role on the login screen to demo.
+Open http://localhost:5173 and log in with a seeded account.
 
-## User Roles (Demo)
+## Environment Configuration
+
+| Variable       | Description                              | Default                    |
+|----------------|------------------------------------------|----------------------------|
+| `VITE_API_URL` | Backend base URL for the dev-server proxy | `http://localhost:5001`   |
+
+The proxy is configured in `vite.config.js`. All `/api/*` and `/uploads/*` requests are forwarded to `VITE_API_URL` at dev time — no CORS issues needed.
+
+## User Roles
 | Role | Description |
 |------|-------------|
 | Admin | Full system control, user management, analytics |
@@ -79,8 +94,16 @@ Open http://localhost:5173 — select any role on the login screen to demo.
 | Vice Chancellor | University-wide overview |
 | Student | Results, AI feedback, performance charts |
 
-## Backend Integration Points
-- Replace `src/constants/mockData.js` with API calls
-- `EvalModal.jsx` → POST `/api/evaluations/:id/approve`
-- `UploadPage.jsx` → POST `/api/answer-sheets/upload`
-- `ExamsPage.jsx` → POST/GET `/api/exams`
+## API Integration
+
+All pages consume `src/services/api.js` — a centralized fetch client that:
+- Attaches the JWT from `localStorage` to every request
+- Proxies through Vite's dev server (no CORS configuration required)
+- Dispatches an `auth:logout` event on 401 responses
+
+Key endpoints used by each page:
+- `EvaluatePage` → `internalEval.triggerAI`, `internalEval.updateMarks`, `internalEval.freeze`
+- `UploadPage` → `answerBooklets.uploadBulk`, `questionPapers.upload`
+- `ExamsPage` → `examEvents.list`, `examEvents.create`, `examEvents.updateStatus`
+- `CIEMarksPage` → `cieMarks.list`, `cieMarks.compute`
+- `ResultsPage` → `results.getForStudent`, `results.declare`

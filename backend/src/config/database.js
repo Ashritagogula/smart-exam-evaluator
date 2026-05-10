@@ -6,7 +6,7 @@ export const connectDB = async () => {
       writeConcern: { w: "majority", j: true },
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 10000,
-      family: 4, // Force IPv4
+      family: 4
     });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (err) {
