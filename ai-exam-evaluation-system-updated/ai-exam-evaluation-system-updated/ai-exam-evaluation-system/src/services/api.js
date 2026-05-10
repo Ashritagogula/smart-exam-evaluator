@@ -143,6 +143,7 @@ export const faculty = {
   update: (id, body) => request(`/faculty/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   getAssignments: (id) => request(`/faculty/${id}/assignments`),
   getMappings: (id) => request(`/faculty/${id}/subject-mappings`),
+  getAllMappings: (params = {}) => request(`/faculty/mappings?${new URLSearchParams(params)}`),
   createMapping: (body) => request("/faculty/subject-mapping", { method: "POST", body: JSON.stringify(body) }),
 };
 

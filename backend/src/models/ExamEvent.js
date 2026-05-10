@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const examEventSchema = new mongoose.Schema({
   type: { type: String, enum: ["internal", "external"], required: true },
-  examType: { type: String, enum: ["IE1", "IE2", "SEE"], required: true },
+  examType: { type: String, enum: ["IE1", "IE2", "SEE", "Mid-1", "Mid-2", "End-Sem", "Supplementary", "Lab Exam"], required: true },
   college: { type: mongoose.Schema.Types.ObjectId, ref: "College", required: true },
   regulation: { type: mongoose.Schema.Types.ObjectId, ref: "Regulation", required: true },
   academicYear: { type: mongoose.Schema.Types.ObjectId, ref: "AcademicYear", required: true },
@@ -18,6 +18,10 @@ const examEventSchema = new mongoose.Schema({
   examDate: { type: Date },
   title: { type: String },
   description: { type: String },
+  section: { type: String },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "Faculty" },
+  maxMarks: { type: Number },
+  duration: { type: Number },
 }, { timestamps: true });
 
 examEventSchema.index({ type: 1, department: 1, academicYear: 1, examType: 1 });
