@@ -64,6 +64,48 @@ export const updateCIEMarks = async (studentId, subjectId, academicYearId, semes
   }
 };
 
+// ─── RELATIVE GRADING ────────────────────────────────────────────────────────
+
+// Map a z-score to a grade using standard deviation thresholds
+export const computeRelativeGrade = (marks, classMean, classStdDev) => {
+  if (classStdDev === 0) return getGrade(marks, 100);
+  const z = (marks - classMean) / classStdDev;
+  if (z >= 1.5)  return { grade: "O",  gradePoints: 10 };
+  if (z >= 1.0)  return { grade: "A+", gradePoints: 9  };
+  if (z >= 0.5)  return { grade: "A",  gradePoints: 8  };
+  if (z >= 0.0)  return { grade: "B+", gradePoints: 7  };
+  if (z >= -0.5) return { grade: "B",  gradePoints: 6  };
+  if (z >= -1.0) return { grade: "C",  gradePoints: 5  };
+  if (z >= -1.5) return { grade: "D",  gradePoints: 4  };
+  return               { grade: "F",  gradePoints: 0  };
+};
+
+// Apply relative grading to all results for a given subject + academic year
+export const applyRelativeGrading = async (subjectId, academicYearId) => {
+  const resultDocs = await FinalResult.find({ subject: subjectId, academicYear: academicYearId });
+  if (!resultDocs.length) return { updated: 0 };
+
+  const allMarks = resultDocs.map(r => r.grandTotal);
+  const mean = allMarks.reduce((a, b) => a + b, 0) / allMarks.length;
+  const variance = allMarks.reduce((s, m) => s + Math.pow(m - mean, 2), 0) / allMarks.length;
+  const stdDev = Math.sqrt(variance);
+  const roundedMean   = Math.round(mean   * 100) / 100;
+  const roundedStdDev = Math.round(stdDev * 100) / 100;
+
+  for (const result of resultDocs) {
+    const { grade, gradePoints } = computeRelativeGrade(result.grandTotal, mean, stdDev);
+    await FinalResult.findByIdAndUpdate(result._id, {
+      grade, gradePoints, isPassed: gradePoints > 0,
+      relativeGradingApplied: true,
+      classMean:   roundedMean,
+      classStdDev: roundedStdDev,
+    });
+  }
+  return { updated: resultDocs.length, classMean: roundedMean, classStdDev: roundedStdDev };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Compute and store final result
 export const computeFinalResult = async (studentId, subjectId, options = {}) => {
   const cieDoc = await CIEMarks.findOne({ student: studentId, subject: subjectId });

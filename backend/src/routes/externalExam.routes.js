@@ -12,6 +12,7 @@ import ScrutinizerReview from "../models/ScrutinizerReview.js";
 import DCEReview from "../models/DCEReview.js";
 import CentralExaminerSubmission from "../models/CentralExaminerSubmission.js";
 import ExamEvent from "../models/ExamEvent.js";
+import AuditLog from "../models/AuditLog.js";
 import {
   convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
 } from "../services/ocr.service.js";
@@ -224,6 +225,12 @@ router.post("/booklets/:bookletId/freeze", authorize("external", "examcell"), as
   await ExternalExamBooklet.findByIdAndUpdate(req.params.bookletId, {
     status: EXTERNAL_BOOKLET_STATUS.FROZEN,
   });
+  await AuditLog.create({
+    action: "freeze_booklet", entity: "ExternalExamBooklet",
+    entityId: req.params.bookletId, performedBy: req.user._id,
+    role: req.user.role, details: { examiner },
+    ipAddress: req.ip,
+  });
   res.json({ message: "Booklet frozen by examiner" });
 }));
 
@@ -283,6 +290,13 @@ router.post("/scrutinizer/review/:bookletId", authorize("scrutinizer", "admin"),
       }
     }
 
+    await AuditLog.create({
+      action: isApproved ? "scrutinizer_approve" : "scrutinizer_flag_issue",
+      entity: "ExternalExamBooklet", entityId: req.params.bookletId,
+      performedBy: req.user._id, role: req.user.role,
+      details: { isApproved, hasIssues, issuesSummary },
+      ipAddress: req.ip,
+    });
     await session.commitTransaction();
     res.json(review[0]);
   } catch (err) {
@@ -294,6 +308,48 @@ router.post("/scrutinizer/review/:bookletId", authorize("scrutinizer", "admin"),
 }));
 
 // ─── DCE ─────────────────────────────────────────────────────────────────────
+
+// Random sample of booklets for DCE spot-check audit
+router.get("/dce/random-sample", authorize("dce", "admin"), asyncHandler(async (req, res) => {
+  const { subjectId, examEventId, count = 5 } = req.query;
+  const filter = { status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED };
+  if (subjectId)   filter.subject   = subjectId;
+  if (examEventId) filter.examEvent = examEventId;
+
+  const allBooklets = await ExternalExamBooklet.find(filter)
+    .populate("student", "rollNumber name")
+    .populate("subject", "courseCode title");
+
+  const shuffled = [...allBooklets].sort(() => Math.random() - 0.5);
+  const sample   = shuffled.slice(0, Math.min(Number(count), allBooklets.length));
+
+  const result = await Promise.all(sample.map(async b => {
+    const [aiEval, examEval] = await Promise.all([
+      ExternalAIEvaluation.findOne({ booklet: b._id }).lean(),
+      ExternalExaminerEvaluation.findOne({ booklet: b._id }).lean(),
+    ]);
+    return {
+      ...b.toObject(),
+      id:      b._id.toString(),
+      roll:    b.student?.rollNumber || b.barcode,
+      name:    b.student?.name || "Unknown",
+      subject: b.subject?.title || b.subject?.courseCode || "Unknown",
+      marks:   examEval?.scaledFinalMarks ?? aiEval?.scaledTotal ?? 0,
+      max:     50,
+      status:  "pending",
+      aiEvaluation:      aiEval  || null,
+      examinerEvaluation: examEval || null,
+    };
+  }));
+
+  await AuditLog.create({
+    action: "dce_random_sample", entity: "ExternalExamBooklet",
+    performedBy: req.user._id, role: req.user.role,
+    details: { subjectId, examEventId, count, sampledCount: result.length },
+    ipAddress: req.ip,
+  });
+  res.json(result);
+}));
 
 router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, res) => {
   const { examEvent, subject } = req.query;
@@ -324,8 +380,51 @@ router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, r
 }));
 
 router.post("/dce/review", authorize("dce", "admin"), asyncHandler(async (req, res) => {
-  const { examEventId, subjectId, sampleBookletIds, reviewNotes, hasCorrections, isApproved, dceFacultyId } = req.body;
+  const {
+    examEventId, subjectId, sampleBookletIds, reviewNotes, hasCorrections, isApproved, dceFacultyId,
+    bookletId, action, reason, yearId,
+  } = req.body;
   const dce = dceFacultyId || req.user.roleRef;
+
+  // ── Individual booklet action from DCE random audit UI ────────────────────
+  if (bookletId && action) {
+    if (action === "approve") {
+      await ExternalExamBooklet.findByIdAndUpdate(bookletId, {
+        status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED,
+      });
+      await AuditLog.create({
+        action: "dce_approve_booklet", entity: "ExternalExamBooklet",
+        entityId: bookletId, performedBy: req.user._id, role: req.user.role,
+        details: { action }, ipAddress: req.ip,
+      });
+      return res.json({ message: "Booklet approved by DCE", bookletId, action });
+    }
+    if (action === "send_back") {
+      await ExternalExamBooklet.findByIdAndUpdate(bookletId, {
+        status: EXTERNAL_BOOKLET_STATUS.SCRUTINIZED,
+      });
+      await ExternalExaminerEvaluation.findOneAndUpdate(
+        { booklet: bookletId }, { $set: { isFrozen: false } }
+      );
+      await AuditLog.create({
+        action: "dce_send_back_booklet", entity: "ExternalExamBooklet",
+        entityId: bookletId, performedBy: req.user._id, role: req.user.role,
+        details: { action, reason }, ipAddress: req.ip,
+      });
+      return res.json({ message: "Booklet sent back to scrutinizer", bookletId, action, reason });
+    }
+    if (action === "approve_to_ce") {
+      await AuditLog.create({
+        action: "dce_approve_to_ce", entity: "AcademicYear",
+        performedBy: req.user._id, role: req.user.role,
+        details: { yearId }, ipAddress: req.ip,
+      });
+      return res.json({ message: "Year results approved for CE submission", yearId });
+    }
+    return res.status(400).json({ message: "Unknown action" });
+  }
+
+  // ── Batch subject review (original flow) ─────────────────────────────────
   const review = await DCEReview.findOneAndUpdate(
     { examEvent: examEventId, subject: subjectId },
     {
@@ -338,7 +437,6 @@ router.post("/dce/review", authorize("dce", "admin"), asyncHandler(async (req, r
   );
 
   if (isApproved) {
-    // Mark all bundles as DCE approved
     await ExternalBundle.updateMany(
       { examEvent: examEventId, subject: subjectId },
       { status: BUNDLE_STATUS.DCE_APPROVED, dceApprovedAt: new Date() }
@@ -347,6 +445,11 @@ router.post("/dce/review", authorize("dce", "admin"), asyncHandler(async (req, r
       { examEvent: examEventId, subject: subjectId },
       { status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED }
     );
+    await AuditLog.create({
+      action: "dce_approve_subject", entity: "ExternalExamBooklet",
+      performedBy: req.user._id, role: req.user.role,
+      details: { examEventId, subjectId, isApproved }, ipAddress: req.ip,
+    });
   }
   res.json(review);
 }));
@@ -414,6 +517,11 @@ router.post("/central/declare", authorize("ce", "admin"), asyncHandler(async (re
     },
     { new: true }
   );
+  await AuditLog.create({
+    action: "ce_declare_results", entity: "CentralExaminerSubmission",
+    entityId: submission?._id, performedBy: req.user._id, role: req.user.role,
+    details: { examEventId, subjectId }, ipAddress: req.ip,
+  });
   res.json(submission);
 }));
 
