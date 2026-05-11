@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import pdf from "pdf-poppler";
 import fs from "fs-extra";
 import path from "path";
@@ -5,7 +6,6 @@ import sharp from "sharp";
 
 const OUTPUT_DIR = "./output";
 
-// Convert PDF to JPEG images
 export const convertPDFToImages = async (filePath, originalName = "file") => {
   await fs.ensureDir(OUTPUT_DIR);
   const safeName = path.parse(originalName).name.replace(/[^a-zA-Z0-9]/g, "_");
@@ -24,27 +24,23 @@ export const convertPDFToImages = async (filePath, originalName = "file") => {
   return files.filter(f => f.startsWith(prefix)).map(f => path.join(OUTPUT_DIR, f));
 };
 
-// Filter blank/useless pages
 export const filterUsefulImages = (images) =>
   images.filter(img => {
     try { return fs.statSync(img).size > 5000; }
     catch { return false; }
   });
 
-// Convert image to base64
 export const imageToBase64 = async (imgPath) => {
   const buffer = await fs.readFile(imgPath);
   return buffer.toString("base64");
 };
 
-// Compress image for faster API transmission
 export const compressImage = async (imgPath) => {
   const compressed = imgPath.replace(".jpg", "_c.jpg").replace(".jpeg", "_c.jpeg");
   await sharp(imgPath).jpeg({ quality: 75 }).toFile(compressed);
   return compressed;
 };
 
-// Cleanup temp files
 export const cleanupFiles = async (files) => {
   for (const f of files) {
     try { await fs.remove(f); } catch {}
@@ -101,48 +97,41 @@ STRICT RULE: If NOT_ATTEMPTED → marksAwarded = 0
 Return ONLY JSON starting with { and ending with }
 `;
 
-// Main evaluation function
 export const evaluateWithGemini = async (studentImages, keyText = "", keyImages = []) => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const parts = [];
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+  const parts = [];
   parts.push({ text: `${basePrompt}\n\nANSWER KEY:\n${keyText || "Answer key is provided in images"}` });
 
   for (const img of keyImages) {
     const base64 = await imageToBase64(img);
-    parts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
   }
 
   for (const img of studentImages) {
     const base64 = await imageToBase64(img);
-    parts.push({ inline_data: { mime_type: "image/jpeg", data: base64 } });
+    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
   }
-
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   async function callGemini(retries = 3) {
     for (let i = 0; i < retries; i++) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts }] }),
-      });
-      if (res.status === 503) {
-        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
-        continue;
+      try {
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts }],
+        });
+        return result.response.text();
+      } catch (err) {
+        if (i < retries - 1 && (err.status === 503 || err.message?.includes("503"))) {
+          await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+          continue;
+        }
+        throw err;
       }
-      return res;
     }
-    throw new Error("Gemini API unavailable after retries");
   }
 
-  const response = await callGemini();
-  const data = await response.json();
-
-  const candidate = data.candidates?.[0];
-  if (!candidate) throw new Error("No candidate in Gemini response");
-
-  let text = candidate.content.parts.map(p => p.text || "").join("");
+  const text = await callGemini();
   const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
 
