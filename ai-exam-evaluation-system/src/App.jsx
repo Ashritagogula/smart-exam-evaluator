@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 import EvalModal from "./components/modals/EvalModal";
@@ -15,32 +15,32 @@ import FeedbackPage from "./pages/FeedbackPage";
 import DepartmentsPage from "./pages/DepartmentsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 
-import AdminDashboard     from "./pages/dashboards/AdminDashboard";
-import ExamCellDashboard  from "./pages/dashboards/ExamCellDashboard";
-import FacultyDashboard   from "./pages/dashboards/FacultyDashboard";
-import HODDashboard       from "./pages/dashboards/HODDashboard";
-import PrincipalDashboard from "./pages/dashboards/PrincipalDashboard";
-import VCDashboard        from "./pages/dashboards/VCDashboard";
-import StudentDashboard   from "./pages/dashboards/StudentDashboard";
-import CollegesPage       from "./pages/CollegesPage";
-import ManageUsersPage    from "./pages/ManageUsersPage";
-import AdminSetupPage     from "./pages/AdminSetupPage";
-import CIEMarksPage       from "./pages/CIEMarksPage";
+import AdminDashboard      from "./pages/dashboards/AdminDashboard";
+import ExamCellDashboard   from "./pages/dashboards/ExamCellDashboard";
+import FacultyDashboard    from "./pages/dashboards/FacultyDashboard";
+import HODDashboard        from "./pages/dashboards/HODDashboard";
+import PrincipalDashboard  from "./pages/dashboards/PrincipalDashboard";
+import VCDashboard         from "./pages/dashboards/VCDashboard";
+import StudentDashboard    from "./pages/dashboards/StudentDashboard";
+import CollegesPage        from "./pages/CollegesPage";
+import ManageUsersPage     from "./pages/ManageUsersPage";
+import AdminSetupPage      from "./pages/AdminSetupPage";
+import CIEMarksPage        from "./pages/CIEMarksPage";
 
-import DCEDashboard from "./pages/dashboards/DCEDashboard";
-import CEDashboard  from "./pages/dashboards/CEDashboard";
-import ClerkDashboard from "./pages/dashboards/ClerkDashboard";
-import ExternalDashboard from "./pages/dashboards/ExternalDashboard";
+import DCEDashboard         from "./pages/dashboards/DCEDashboard";
+import CEDashboard          from "./pages/dashboards/CEDashboard";
+import ClerkDashboard       from "./pages/dashboards/ClerkDashboard";
+import ExternalDashboard    from "./pages/dashboards/ExternalDashboard";
 import CoordinatorDashboard from "./pages/dashboards/CoordinatorDashboard";
 import ScrutinizerDashboard from "./pages/dashboards/ScrutinizerDashboard";
-import ChairmanDashboard from "./pages/dashboards/ChairmanDashboard";
-import HODFacultyPage from "./pages/HODFacultyPage";
-import ScriptViewPage from "./pages/ScriptViewPage";
+import ChairmanDashboard    from "./pages/dashboards/ChairmanDashboard";
+import HODFacultyPage       from "./pages/HODFacultyPage";
+import ScriptViewPage       from "./pages/ScriptViewPage";
 
 import { auth } from "./services/api.js";
 import "./index.css";
 
-// ── TOAST ───────────────────────────────────────────────────
+// ── TOAST ────────────────────────────────────────────────────────────────────
 const Toast = ({ msg, type }) => (
   <div className={`notif notif-${type}`}>
     <Icon name={type === "success" ? "check" : "close"} size={16} color="#fff" />
@@ -48,87 +48,47 @@ const Toast = ({ msg, type }) => (
   </div>
 );
 
-// ── DASHBOARD ROUTER ────────────────────────────────────────
-const Dashboard = ({ role, onNav, setEvalModal, sec, user }) => {
+// ── ROLE DASHBOARD ───────────────────────────────────────────────────────────
+const RoleDashboard = ({ role, onNav, setEvalModal, user }) => {
   if (role === "admin")     return <AdminDashboard user={user} />;
   if (role === "examcell")  return <ExamCellDashboard onNav={onNav} user={user} />;
   if (role === "faculty" || role === "subject_coordinator")
-                            return <FacultyDashboard setEvalModal={setEvalModal} sec={sec} user={user} />;
+                            return <FacultyDashboard setEvalModal={setEvalModal} user={user} />;
   if (role === "hod")       return <HODDashboard user={user} />;
   if (role === "principal") return <PrincipalDashboard user={user} />;
   if (role === "vc")        return <VCDashboard user={user} />;
   if (role === "student")   return <StudentDashboard user={user} onNav={onNav} />;
-  if (role === "dce")       return <DCEDashboard sec={sec} user={user} />;
-  if (role === "ce")        return <CEDashboard  sec={sec} user={user} />;
+  if (role === "dce")       return <DCEDashboard user={user} />;
+  if (role === "ce")        return <CEDashboard user={user} />;
   if (role === "clerk")     return <ClerkDashboard user={user} />;
-  if (role === "external")  return <ExternalDashboard sec={sec} setEvalModal={setEvalModal} user={user} />;
+  if (role === "external")  return <ExternalDashboard setEvalModal={setEvalModal} user={user} />;
   if (role === "scrutinizer") return <ScrutinizerDashboard user={user} />;
-  if (role === "chairman")   return <ChairmanDashboard user={user} />;
+  if (role === "chairman")    return <ChairmanDashboard user={user} />;
   return null;
 };
 
-// ── PAGE ROUTER ─────────────────────────────────────────────
-const PageRouter = ({
-  role, sec, onNav, toast,
-  doUpload, uploadPct,
-  setEvalModal, modMarks, setModMarks,
-  user,
-}) => {
-  if (sec === "dce_random" && role === "dce") return <DCEDashboard sec="random" user={user} />;
-  if (sec === "dce_notif"  && role === "dce") return <DCEDashboard sec="notif"  user={user} />;
-  if (sec === "ce_notif"   && role === "ce")  return <CEDashboard  sec="notif"  user={user} />;
-  if (sec === "dashboard") {
-    return <Dashboard role={role} onNav={onNav} setEvalModal={setEvalModal} sec={sec} user={user} />;
-  }
-  if (sec === "labs") {
-    if (role === "faculty" || role === "subject_coordinator") {
-      return <FacultyDashboard setEvalModal={setEvalModal} sec="labs" user={user} />;
-    }
-  }
-  if (sec === "evaluate") {
-    if (role === "external") return <ExternalDashboard sec="evaluate" user={user} />;
-    return <FacultyDashboard setEvalModal={setEvalModal} sec="evaluate" user={user} />;
-  }
-  if (sec === "assigned") return <EvaluatePage user={user} />;
-  if (sec === "sc_upload") return <CoordinatorDashboard user={user} />;
-  if (sec === "upload")    return <UploadPage doUpload={doUpload} uploadPct={uploadPct} user={user} />;
-  if (sec === "exams")     return <ExamsPage toast={toast} user={user} />;
-  if (sec === "users")     return <UsersPage toast={toast} user={user} onNav={onNav} />;
-  if (sec === "results")   return <ResultsPage toast={toast} role={role} user={user} />;
-  if (sec === "feedback")  return <FeedbackPage user={user} />;
-  if (sec === "departments" || sec === "department") return <DepartmentsPage user={user} />;
-  if (sec === "faculty" && role === "hod") return <HODFacultyPage user={user} />;
-  if (sec === "analytics") return <AnalyticsPage user={user} />;
-  if (sec === "setup")     return role === "admin" ? <AdminSetupPage user={user} /> : null;
-  if (sec === "colleges")  return role === "admin" ? <CollegesPage user={user} /> : null;
-  if (sec === "examusers") return <ManageUsersPage user={user} />;
-  if (sec === "cie")         return <CIEMarksPage user={user} />;
-  if (sec === "my_scripts")  return <ScriptViewPage user={user} />;
+const ComingSoon = () => (
+  <div style={{ textAlign: "center", paddingTop: "60px", color: "#6478a0" }}>
+    Section coming soon.
+  </div>
+);
 
-  return (
-    <div style={{ textAlign:"center", paddingTop:"60px", color:"#6478a0" }}>
-      Section coming soon.
-    </div>
-  );
-};
-
-// ── APP ROOT ────────────────────────────────────────────────
+// ── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const sec = location.pathname === "/" ? "dashboard" : location.pathname.slice(1).split("/")[0];
   const onNav = (section) => navigate("/" + section);
 
-  const [user,      setUser]      = useState(null);
-  const [evalModal, setEvalModal] = useState(null);
-  const [modMarks,  setModMarks]  = useState({});
-  const [loginForm, setLoginForm] = useState({ email:"", pass:"" });
-  const [notif,     setNotif]     = useState(null);
-  const [uploadPct, setUploadPct] = useState(null);
+  const [user,        setUser]      = useState(null);
+  const [evalModal,   setEvalModal] = useState(null);
+  const [modMarks,    setModMarks]  = useState({});
+  const [loginForm,   setLoginForm] = useState({ email: "", pass: "" });
+  const [notif,       setNotif]     = useState(null);
+  const [uploadPct,   setUploadPct] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [loginError, setLoginError] = useState("");
+  const [loginError,  setLoginError]  = useState("");
 
-  // Restore session on mount
   useEffect(() => {
     const token = auth.getToken();
     if (token) {
@@ -140,37 +100,36 @@ export default function App() {
       setAuthLoading(false);
     }
 
-    // Listen for forced logout (401)
     const handleLogout = () => { setUser(null); navigate("/"); };
     window.addEventListener("auth:logout", handleLogout);
     return () => window.removeEventListener("auth:logout", handleLogout);
   }, []);
 
   const normalizeUser = (u) => ({
-    id: u.id || u._id,
-    name: u.name,
-    role: u.role,
-    email: u.email,
-    title: getRoleTitle(u.role),
-    av: u.avatar || u.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(),
+    id:      u.id || u._id,
+    name:    u.name,
+    role:    u.role,
+    email:   u.email,
+    title:   getRoleTitle(u.role),
+    av:      u.avatar || u.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase(),
     profile: u.profile,
   });
 
   const getRoleTitle = (role) => ({
-    admin: "System Administrator",
-    examcell: "Exam Cell Officer",
-    faculty: "Asst. Professor, CSE",
+    admin:               "System Administrator",
+    examcell:            "Exam Cell Officer",
+    faculty:             "Asst. Professor, CSE",
     subject_coordinator: "Subject Coordinator",
-    hod: "Head of Department – CSE",
-    principal: "Principal",
-    vc: "Vice Chancellor",
-    student: "B.Tech CSE Student",
-    dce: "Department Chief Examiner",
-    ce: "Controller of Examination",
-    clerk: "Examination Clerk",
-    scrutinizer: "Scrutinizer",
-    external: "External Examiner",
-    chairman: "Chairman",
+    hod:                 "Head of Department – CSE",
+    principal:           "Principal",
+    vc:                  "Vice Chancellor",
+    student:             "B.Tech CSE Student",
+    dce:                 "Department Chief Examiner",
+    ce:                  "Controller of Examination",
+    clerk:               "Examination Clerk",
+    scrutinizer:         "Scrutinizer",
+    external:            "External Examiner",
+    chairman:            "Chairman",
   }[role] || role);
 
   const toast = (msg, type = "success") => {
@@ -178,15 +137,13 @@ export default function App() {
     setTimeout(() => setNotif(null), 3200);
   };
 
-  const doUpload = (formData) => {
-    return new Promise((resolve, reject) => {
+  const doUpload = (formData) =>
+    new Promise((resolve, reject) => {
       const token = localStorage.getItem("au_token");
       const xhr = new XMLHttpRequest();
 
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          setUploadPct(Math.round((e.loaded / e.total) * 95));
-        }
+        if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 95));
       };
 
       xhr.onload = () => {
@@ -213,7 +170,6 @@ export default function App() {
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       xhr.send(formData);
     });
-  };
 
   const login = async () => {
     setLoginError("");
@@ -234,10 +190,10 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#f8faff" }}>
-        <div style={{ textAlign:"center" }}>
-          <div style={{ width:48, height:48, border:"4px solid #002366", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 16px" }} />
-          <p style={{ color:"#002366", fontWeight:600 }}>Loading...</p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#f8faff" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, border: "4px solid #002366", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+          <p style={{ color: "#002366", fontWeight: 600 }}>Loading...</p>
         </div>
       </div>
     );
@@ -254,34 +210,48 @@ export default function App() {
     );
   }
 
+  const { role } = user;
+
   return (
     <div className="app-shell">
       {notif && <Toast {...notif} />}
 
-      <Sidebar
-        role={user.role}
-        active={sec}
-        onNav={onNav}
-        user={user}
-        onLogout={logout}
-      />
+      <Sidebar role={role} active={sec} onNav={onNav} user={user} onLogout={logout} />
 
       <div className="app-main">
-        <Topbar section={sec} role={user.role} user={user} />
+        <Topbar section={sec} role={role} user={user} />
 
         <div className="app-content">
-          <PageRouter
-            role={user.role}
-            sec={sec}
-            onNav={onNav}
-            toast={toast}
-            doUpload={doUpload}
-            uploadPct={uploadPct}
-            setEvalModal={setEvalModal}
-            modMarks={modMarks}
-            setModMarks={setModMarks}
-            user={user}
-          />
+          <Routes>
+            <Route path="/"            element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard"   element={<RoleDashboard role={role} onNav={onNav} setEvalModal={setEvalModal} user={user} />} />
+            <Route path="/evaluate"    element={
+              role === "external"
+                ? <ExternalDashboard sec="evaluate" user={user} />
+                : <FacultyDashboard setEvalModal={setEvalModal} sec="evaluate" user={user} />
+            } />
+            <Route path="/labs"        element={<FacultyDashboard setEvalModal={setEvalModal} sec="labs" user={user} />} />
+            <Route path="/assigned"    element={<EvaluatePage user={user} />} />
+            <Route path="/sc_upload"   element={<CoordinatorDashboard user={user} />} />
+            <Route path="/upload"      element={<UploadPage doUpload={doUpload} uploadPct={uploadPct} user={user} />} />
+            <Route path="/exams"       element={<ExamsPage toast={toast} user={user} />} />
+            <Route path="/users"       element={<UsersPage toast={toast} user={user} onNav={onNav} />} />
+            <Route path="/results"     element={<ResultsPage toast={toast} role={role} user={user} />} />
+            <Route path="/feedback"    element={<FeedbackPage user={user} />} />
+            <Route path="/departments" element={<DepartmentsPage user={user} />} />
+            <Route path="/department"  element={<DepartmentsPage user={user} />} />
+            <Route path="/faculty"     element={role === "hod" ? <HODFacultyPage user={user} /> : <ComingSoon />} />
+            <Route path="/analytics"   element={<AnalyticsPage user={user} />} />
+            <Route path="/setup"       element={role === "admin" ? <AdminSetupPage user={user} /> : <ComingSoon />} />
+            <Route path="/colleges"    element={role === "admin" ? <CollegesPage user={user} /> : <ComingSoon />} />
+            <Route path="/examusers"   element={<ManageUsersPage user={user} />} />
+            <Route path="/cie"         element={<CIEMarksPage user={user} />} />
+            <Route path="/my_scripts"  element={<ScriptViewPage user={user} />} />
+            <Route path="/dce_random"  element={<DCEDashboard sec="random" user={user} />} />
+            <Route path="/dce_notif"   element={<DCEDashboard sec="notif"  user={user} />} />
+            <Route path="/ce_notif"    element={<CEDashboard  sec="notif"  user={user} />} />
+            <Route path="*"            element={<ComingSoon />} />
+          </Routes>
         </div>
       </div>
 

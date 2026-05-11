@@ -16,8 +16,10 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   const statusCode = err.statusCode || 500;
+  if (err.retryAfterSeconds) res.setHeader("Retry-After", err.retryAfterSeconds);
   res.status(statusCode).json({
     message: err.message || "Internal server error",
+    ...(err.retryAfterSeconds && { retryAfterSeconds: err.retryAfterSeconds }),
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 };

@@ -22,7 +22,7 @@ const FeedbackPage = ({ user }) => {
         setBooklets(evaluated);
         if (evaluated.length > 0) loadEval(evaluated[0]);
       })
-      .catch(() => {})
+      .catch((err) => console.error("[FeedbackPage] Failed to load booklets:", err))
       .finally(() => setLoading(false));
   }, [studentId]);
 
