@@ -133,6 +133,11 @@ export const evaluateWithGemini = async (studentImages, keyText = "", keyImages 
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
+        // Attach retry metadata so the error handler can send Retry-After to the client
+        if (err.status === 429 || err.message?.includes("429")) {
+          err.retryAfterSeconds = Math.ceil((AI_RETRY_BASE_DELAY_MS * Math.pow(2, AI_RETRY_COUNT)) / 1000);
+          err.statusCode = 429;
+        }
         throw err;
       }
     }
