@@ -70,14 +70,21 @@ router.post("/upload-bulk", authorize("clerk", "examcell", "admin"), (req, res, 
 }, asyncHandler(async (req, res) => {
   if (!req.files?.length) return res.status(400).json({ message: "No booklets uploaded" });
   const { examEventId, subjectId, examType, barcodeMap } = req.body;
-  const barcodes = barcodeMap ? JSON.parse(barcodeMap) : {};
+  if (!examEventId) return res.status(400).json({ message: "examEventId is required" });
+  if (!subjectId)   return res.status(400).json({ message: "subjectId is required" });
+  let barcodes = {};
+  try {
+    barcodes = barcodeMap ? JSON.parse(barcodeMap) : {};
+  } catch {
+    return res.status(400).json({ message: "barcodeMap must be valid JSON" });
+  }
 
   const created = [];
   for (const file of req.files) {
     const barcode = barcodes[file.originalname] || `BC-${uuidv4().slice(0, 8).toUpperCase()}`;
     const b = await AnswerBooklet.create({
       barcode,
-      student: barcodes[`${file.originalname}_student`],
+      student: barcodes[`${file.originalname}_student`] || undefined,
       subject: subjectId,
       examEvent: examEventId,
       examType: examType || "IE1",
@@ -103,6 +110,10 @@ router.patch("/:id/assign", authorize("clerk", "examcell", "admin"), asyncHandle
 // Bulk assign booklets to a faculty
 router.post("/bulk-assign", authorize("clerk", "examcell", "admin"), asyncHandler(async (req, res) => {
   const { bookletIds, facultyId } = req.body;
+  if (!Array.isArray(bookletIds) || !bookletIds.length)
+    return res.status(400).json({ message: "bookletIds must be a non-empty array" });
+  if (!facultyId)
+    return res.status(400).json({ message: "facultyId is required" });
   await AnswerBooklet.updateMany(
     { _id: { $in: bookletIds } },
     { assignedFaculty: facultyId, assignmentDate: new Date() }

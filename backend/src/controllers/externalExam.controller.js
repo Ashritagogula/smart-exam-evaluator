@@ -13,9 +13,18 @@ import {
   convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
 } from "../services/ocr.service.js";
 import { EXTERNAL_BOOKLET_STATUS, BUNDLE_STATUS } from "../config/constants.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { isQueueEnabled, enqueueBundleEvaluation } from "../services/queue.service.js";
 
-export const aiEvaluateBundle = async (req, res) => {
-  const bundle = await ExternalBundle.findById(req.params.bundleId)
+export const aiEvaluateBundle = asyncHandler(async (req, res) => {
+  const { bundleId } = req.params;
+
+  if (isQueueEnabled) {
+    const job = await enqueueBundleEvaluation(bundleId);
+    return res.status(202).json({ queued: true, jobId: job.id, bundleId });
+  }
+
+  const bundle = await ExternalBundle.findById(bundleId)
     .populate("booklets").populate("examEvent").populate("subject");
   if (!bundle) return res.status(404).json({ message: "Bundle not found" });
 
@@ -75,9 +84,9 @@ export const aiEvaluateBundle = async (req, res) => {
 
   await ExternalBundle.findByIdAndUpdate(bundle._id, { status: BUNDLE_STATUS.EVALUATED });
   res.json({ message: `AI evaluated ${results.length} booklets`, results });
-};
+});
 
-export const scrutinizerReview = async (req, res) => {
+export const scrutinizerReview = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -132,9 +141,9 @@ export const scrutinizerReview = async (req, res) => {
   } finally {
     session.endSession();
   }
-};
+});
 
-export const dceReview = async (req, res) => {
+export const dceReview = asyncHandler(async (req, res) => {
   const {
     examEventId, subjectId, sampleBookletIds, reviewNotes, hasCorrections, isApproved, dceFacultyId,
     bookletId, action, reason, yearId,
@@ -201,9 +210,9 @@ export const dceReview = async (req, res) => {
     });
   }
   res.json(review);
-};
+});
 
-export const submitToCE = async (req, res) => {
+export const submitToCE = asyncHandler(async (req, res) => {
   const { examEventId, subjectId, dceFacultyId } = req.body;
   const booklets = await ExternalExamBooklet.find({
     examEvent: examEventId, subject: subjectId,
@@ -247,9 +256,9 @@ export const submitToCE = async (req, res) => {
     { statisticsSentToCE: true, statisticsSentAt: new Date() }
   );
   res.json(submission);
-};
+});
 
-export const sendEvaluatorMessage = async (req, res) => {
+export const sendEvaluatorMessage = asyncHandler(async (req, res) => {
   const { examEventId, subjectId, message, sentToFacultyId } = req.body;
   if (!message) return res.status(400).json({ message: "Message content is required" });
 
@@ -269,4 +278,4 @@ export const sendEvaluatorMessage = async (req, res) => {
 
   if (!review) return res.status(404).json({ message: "DCE review not found for this subject and exam event" });
   res.json({ message: "Message sent to evaluator", communicationLog: review.communicationLog });
-};
+});

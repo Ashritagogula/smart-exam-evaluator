@@ -122,7 +122,7 @@ router.post("/bundles/create", authorize("examcell", "admin", "dce"), asyncHandl
 
 router.post("/bundles/:bundleId/ai-evaluate",
   authorize("external", "examcell"),
-  asyncHandler(aiEvaluateBundle)
+  aiEvaluateBundle
 );
 
 // ─── EXAMINER ─────────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ router.get("/scrutinizer/pending", authorize("scrutinizer", "admin"), asyncHandl
 
 router.post("/scrutinizer/review/:bookletId",
   authorize("scrutinizer", "admin"),
-  asyncHandler(scrutinizerReview)
+  scrutinizerReview
 );
 
 // ─── DCE ─────────────────────────────────────────────────────────────────────
@@ -265,10 +265,10 @@ router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, r
   res.json(result);
 }));
 
-router.post("/dce/review", authorize("dce", "admin"), asyncHandler(dceReview));
+router.post("/dce/review", authorize("dce", "admin"), dceReview);
 
 // DCE sends a message to an evaluator (recorded in communicationLog)
-router.post("/dce/message", authorize("dce", "admin"), asyncHandler(sendEvaluatorMessage));
+router.post("/dce/message", authorize("dce", "admin"), sendEvaluatorMessage);
 
 router.get("/dce/communication-log", authorize("dce", "admin", "examcell"), asyncHandler(async (req, res) => {
   const { examEventId, subjectId } = req.query;
@@ -280,7 +280,7 @@ router.get("/dce/communication-log", authorize("dce", "admin", "examcell"), asyn
 
 // ─── CENTRAL EXAMINER ────────────────────────────────────────────────────────
 
-router.post("/central/submit", authorize("dce", "admin"), asyncHandler(submitToCE));
+router.post("/central/submit", authorize("dce", "admin"), submitToCE);
 
 router.post("/central/declare", authorize("ce", "admin"), asyncHandler(async (req, res) => {
   const { examEventId, subjectId, ceFacultyId } = req.body;

@@ -11,11 +11,19 @@ import { BOOKLET_STATUS, REVIEW_WINDOW_HOURS } from "../config/constants.js";
 import {
   convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
 } from "../services/ocr.service.js";
+import { isQueueEnabled, enqueueBookletEvaluation } from "../services/queue.service.js";
 
 export const aiEvaluateBooklet = async (req, res) => {
-  const booklet = await AnswerBooklet.findById(req.params.bookletId)
-    .populate("examEvent subject");
+  const { bookletId } = req.params;
+  const booklet = await AnswerBooklet.findById(bookletId).populate("examEvent subject");
   if (!booklet) return res.status(404).json({ message: "Booklet not found" });
+
+  if (isQueueEnabled) {
+    const job = await enqueueBookletEvaluation(bookletId, {
+      answerKeyText: req.body.answerKeyText || "",
+    });
+    return res.status(202).json({ queued: true, jobId: job.id, bookletId });
+  }
 
   const schema = await EvaluationSchema.findOne({
     examEvent: booklet.examEvent._id,

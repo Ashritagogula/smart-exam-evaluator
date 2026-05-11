@@ -4,6 +4,9 @@ import LabMarks from "../models/LabMarks.js";
 import Student from "../models/Student.js";
 import AcademicYear from "../models/AcademicYear.js";
 import { getGrade, applyRelativeGrading } from "../services/marks.service.js";
+import { batchNotarizeResults } from "../services/blockchain.service.js";
+import { syncResultToERP, pushGradesToLMS } from "../services/erp.service.js";
+import { notifyResultsDeclared } from "../services/mobilePush.service.js";
 
 export const computeResult = async (req, res) => {
   const { studentId, subjectId, academicYearId, semesterId, regulationId, seeTheoryMarks } = req.body;
@@ -76,6 +79,47 @@ export const declareResults = async (req, res) => {
     { subject: subjectId, academicYear: academicYearId },
     { isDeclared: true, declaredAt: new Date() }
   );
+
+  // Fire-and-forget downstream integrations: blockchain, ERP, LMS, mobile push
+  FinalResult.find({ subject: subjectId, academicYear: academicYearId, isDeclared: true })
+    .populate("student subject academicYear semester")
+    .lean()
+    .then(async (results) => {
+      if (!results.length) return;
+
+      const courseCode   = results[0]?.subject?.courseCode || "";
+      const academicYear = results[0]?.academicYear?.year  || "";
+
+      // Blockchain notarization — store tx hash on each result record
+      batchNotarizeResults(results)
+        .then(({ outcomes }) => {
+          const successful = outcomes.filter(o => o.success && o.transactionHash);
+          return Promise.all(successful.map(o =>
+            FinalResult.findByIdAndUpdate(o.resultId, {
+              blockchainTxHash:      o.transactionHash,
+              blockchainNotarizedAt: o.notarizedAt,
+            })
+          ));
+        })
+        .catch(err => console.error("[Blockchain] batch notarization failed:", err.message));
+
+      // ERP sync — push each result to the university ERP
+      Promise.all(results.map(r =>
+        syncResultToERP(r)
+          .then(() => FinalResult.findByIdAndUpdate(r._id, { erpSyncedAt: new Date() }))
+          .catch(() => null)
+      )).catch(() => null);
+
+      // LMS gradebook push
+      pushGradesToLMS(courseCode, results).catch(() => null);
+
+      // Mobile push notifications to students
+      const studentDocs = results.map(r => r.student).filter(Boolean);
+      notifyResultsDeclared(studentDocs, courseCode, academicYear)
+        .catch(err => console.error("[MobilePush] notification failed:", err.message));
+    })
+    .catch(() => null);
+
   res.json({ message: "Results declared" });
 };
 
