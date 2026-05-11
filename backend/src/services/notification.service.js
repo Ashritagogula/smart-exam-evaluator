@@ -1,4 +1,5 @@
 import StudentNotification from "../models/StudentNotification.js";
+import { emitToStudent } from "./sse.service.js";
 
 export const sendStudentNotification = async ({
   studentId, userId, type, subjectId, bookletId, message, title, reviewWindowExpiresAt,
@@ -15,6 +16,7 @@ export const sendStudentNotification = async ({
     sentAt: new Date(),
     reviewWindowExpiresAt,
   });
+  emitToStudent(studentId, "notification", notif);
   return notif;
 };
 

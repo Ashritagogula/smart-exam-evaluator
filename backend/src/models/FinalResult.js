@@ -22,6 +22,9 @@ const finalResultSchema = new mongoose.Schema({
   relativeGradingApplied: { type: Boolean, default: false },
   classMean:   { type: Number },
   classStdDev: { type: Number },
+  blockchainTxHash:      { type: String },
+  blockchainNotarizedAt: { type: Date },
+  erpSyncedAt:           { type: Date },
 }, { timestamps: true });
 
 finalResultSchema.index({ student: 1, subject: 1 }, { unique: true });
