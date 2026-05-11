@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 import { uploadBooklets } from "../middleware/upload.middleware.js";
@@ -13,12 +12,15 @@ import DCEReview from "../models/DCEReview.js";
 import CentralExaminerSubmission from "../models/CentralExaminerSubmission.js";
 import ExamEvent from "../models/ExamEvent.js";
 import AuditLog from "../models/AuditLog.js";
-import {
-  convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
-} from "../services/ocr.service.js";
-import EvaluationSchema from "../models/EvaluationSchema.js";
 import { EXTERNAL_BOOKLET_STATUS, BUNDLE_STATUS } from "../config/constants.js";
 import { v4 as uuidv4 } from "uuid";
+import {
+  aiEvaluateBundle,
+  scrutinizerReview,
+  dceReview,
+  submitToCE,
+  sendEvaluatorMessage,
+} from "../controllers/externalExam.controller.js";
 
 const router = express.Router();
 router.use(authenticate);
@@ -26,7 +28,7 @@ router.use(authenticate);
 // ─── BOOKLETS ───────────────────────────────────────────────────────────────
 
 router.get("/booklets", asyncHandler(async (req, res) => {
-  const { examEvent, bundle, status, subject, examiner } = req.query;
+  const { examEvent, bundle, status, subject } = req.query;
   const filter = {};
   if (examEvent) filter.examEvent = examEvent;
   if (bundle) filter.bundle = bundle;
@@ -44,16 +46,16 @@ router.get("/booklets", asyncHandler(async (req, res) => {
     ExternalExaminerEvaluation.find({ booklet: { $in: ids } }).lean(),
     ScrutinizerReview.find({ booklet: { $in: ids } }).lean(),
   ]);
-  const aiMap      = Object.fromEntries(aiEvals.map(a => [a.booklet.toString(), a]));
-  const examMap    = Object.fromEntries(examinerEvals.map(e => [e.booklet.toString(), e]));
-  const scrutMap   = Object.fromEntries(scrutReviews.map(s => [s.booklet.toString(), s]));
+  const aiMap    = Object.fromEntries(aiEvals.map(a => [a.booklet.toString(), a]));
+  const examMap  = Object.fromEntries(examinerEvals.map(e => [e.booklet.toString(), e]));
+  const scrutMap = Object.fromEntries(scrutReviews.map(s => [s.booklet.toString(), s]));
 
   res.json(booklets.map(b => ({
     ...b.toObject(),
-    aiEvaluation:       aiMap[b._id.toString()]    || null,
-    examinerEvaluation: examMap[b._id.toString()]   || null,
+    aiEvaluation:          aiMap[b._id.toString()]    || null,
+    examinerEvaluation:    examMap[b._id.toString()]   || null,
     returnedByScrutinizer: scrutMap[b._id.toString()]?.action === "return",
-    returnMessage:      scrutMap[b._id.toString()]?.comments || "",
+    returnMessage:         scrutMap[b._id.toString()]?.comments || "",
   })));
 }));
 
@@ -93,7 +95,6 @@ router.get("/bundles", asyncHandler(async (req, res) => {
     .populate("booklets"));
 }));
 
-// Create bundles (divide booklets among examiners)
 router.post("/bundles/create", authorize("examcell", "admin", "dce"), asyncHandler(async (req, res) => {
   const { examEventId, subjectId, examinerIds } = req.body;
   const booklets = await ExternalExamBooklet.find({
@@ -119,71 +120,13 @@ router.post("/bundles/create", authorize("examcell", "admin", "dce"), asyncHandl
   res.status(201).json({ message: `${bundles.length} bundles created`, bundles });
 }));
 
-// Examiner triggers AI evaluation for their bundle
-router.post("/bundles/:bundleId/ai-evaluate", authorize("external", "examcell"), asyncHandler(async (req, res) => {
-  const bundle = await ExternalBundle.findById(req.params.bundleId)
-    .populate("booklets").populate("examEvent").populate("subject");
-  if (!bundle) return res.status(404).json({ message: "Bundle not found" });
+router.post("/bundles/:bundleId/ai-evaluate",
+  authorize("external", "examcell"),
+  asyncHandler(aiEvaluateBundle)
+);
 
-  await ExternalBundle.findByIdAndUpdate(bundle._id, { status: BUNDLE_STATUS.EVALUATING });
+// ─── EXAMINER ─────────────────────────────────────────────────────────────────
 
-  const schema = await EvaluationSchema.findOne({
-    examEvent: bundle.examEvent._id, subject: bundle.subject._id,
-  });
-  const keyText = schema
-    ? schema.questions.map(q => `${q.questionNumber}: ${q.description || ""} [${q.maxMarks} marks]`).join("\n")
-    : "";
-
-  const results = [];
-  for (const booklet of bundle.booklets) {
-    let allImages = [];
-    try {
-      const filePath = `.${booklet.fileUrl}`;
-      const rawImages = await convertPDFToImages(filePath, booklet.fileName || "booklet.pdf");
-      allImages = rawImages;
-      const studentImages = filterUsefulImages(rawImages);
-      const aiResult = await evaluateWithGemini(studentImages, keyText);
-
-      const totalMarks = aiResult.totalMarks || 0;
-      const scaledTotal = Math.round((totalMarks / (aiResult.maxMarks || 100)) * 50 * 100) / 100;
-
-      const aiEval = await ExternalAIEvaluation.findOneAndUpdate(
-        { booklet: booklet._id },
-        {
-          booklet: booklet._id,
-          questionWiseMarks: (aiResult.questionWise || []).map(q => ({
-            questionNumber: q.question || "",
-            maxMarks: q.maxMarks || 0,
-            marksAwarded: q.marksAwarded || 0,
-            scaledMarks: Math.round(((q.marksAwarded || 0) / (q.maxMarks || 1)) * 50 * 100) / 100,
-            status: q.status || "not_attempted",
-            feedback: q.feedback || "",
-          })),
-          totalMarks, scaledTotal,
-          maxMarks: aiResult.maxMarks || 100,
-          strengths: aiResult.strengths || [],
-          weaknesses: aiResult.weaknesses || [],
-          mistakes: aiResult.mistakes || [],
-          suggestions: aiResult.suggestions || [],
-          processedAt: new Date(),
-        },
-        { upsert: true, new: true }
-      );
-
-      await ExternalExamBooklet.findByIdAndUpdate(booklet._id, {
-        status: EXTERNAL_BOOKLET_STATUS.AI_EVALUATED,
-      });
-      results.push({ bookletId: booklet._id, totalMarks, scaledTotal });
-    } finally {
-      await cleanupFiles(allImages);
-    }
-  }
-
-  await ExternalBundle.findByIdAndUpdate(bundle._id, { status: BUNDLE_STATUS.EVALUATED });
-  res.json({ message: `AI evaluated ${results.length} booklets`, results });
-}));
-
-// Examiner modifies marks
 router.put("/booklets/:bookletId/marks", authorize("external", "examcell"), asyncHandler(async (req, res) => {
   const { modifications, finalMarks, examinerFacultyId } = req.body;
   const booklet = await ExternalExamBooklet.findById(req.params.bookletId);
@@ -214,7 +157,6 @@ router.put("/booklets/:bookletId/marks", authorize("external", "examcell"), asyn
   res.json(eval_);
 }));
 
-// Examiner freezes a booklet
 router.post("/booklets/:bookletId/freeze", authorize("external", "examcell"), asyncHandler(async (req, res) => {
   const examiner = req.user.roleRef || req.body.examinerFacultyId;
   await ExternalExaminerEvaluation.findOneAndUpdate(
@@ -249,67 +191,13 @@ router.get("/scrutinizer/pending", authorize("scrutinizer", "admin"), asyncHandl
   res.json(result);
 }));
 
-router.post("/scrutinizer/review/:bookletId", authorize("scrutinizer", "admin"), asyncHandler(async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const { questionChecks, isApproved, issuesSummary, scrutinizerFacultyId } = req.body;
-    const hasIssues = questionChecks?.some(q => q.hasIssue) || false;
-    const scrutinizer = scrutinizerFacultyId || req.user.roleRef;
-
-    const review = await ScrutinizerReview.create([{
-      booklet: req.params.bookletId, scrutinizer,
-      questionChecks: questionChecks || [], isApproved, hasIssues, issuesSummary,
-      reviewedAt: new Date(),
-      approvedAt: isApproved ? new Date() : undefined,
-      unfreezeTriggered: hasIssues,
-    }], { session });
-
-    if (hasIssues) {
-      // Unfreeze and notify examiner
-      await ExternalExaminerEvaluation.findOneAndUpdate(
-        { booklet: req.params.bookletId }, { $set: { isFrozen: false } }, { session }
-      );
-      await ExternalExamBooklet.findByIdAndUpdate(req.params.bookletId, {
-        status: EXTERNAL_BOOKLET_STATUS.EXAMINER_REVIEWED,
-      }, { session });
-    } else {
-      await ExternalExamBooklet.findByIdAndUpdate(req.params.bookletId, {
-        status: EXTERNAL_BOOKLET_STATUS.SCRUTINIZED,
-      }, { session });
-
-      // Check if ALL booklets in bundle are scrutinized
-      const booklet = await ExternalExamBooklet.findById(req.params.bookletId).session(session);
-      if (booklet.bundle) {
-        const bundle = await ExternalBundle.findById(booklet.bundle).session(session);
-        const allBooklets = await ExternalExamBooklet.find({ bundle: booklet.bundle }).session(session);
-        const allScrutinized = allBooklets.every(b => b.status === EXTERNAL_BOOKLET_STATUS.SCRUTINIZED || b._id.equals(req.params.bookletId));
-        if (allScrutinized) {
-          await ExternalBundle.findByIdAndUpdate(booklet.bundle, { status: BUNDLE_STATUS.SCRUTINIZED }, { session });
-        }
-      }
-    }
-
-    await AuditLog.create({
-      action: isApproved ? "scrutinizer_approve" : "scrutinizer_flag_issue",
-      entity: "ExternalExamBooklet", entityId: req.params.bookletId,
-      performedBy: req.user._id, role: req.user.role,
-      details: { isApproved, hasIssues, issuesSummary },
-      ipAddress: req.ip,
-    });
-    await session.commitTransaction();
-    res.json(review[0]);
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
-}));
+router.post("/scrutinizer/review/:bookletId",
+  authorize("scrutinizer", "admin"),
+  asyncHandler(scrutinizerReview)
+);
 
 // ─── DCE ─────────────────────────────────────────────────────────────────────
 
-// Random sample of booklets for DCE spot-check audit
 router.get("/dce/random-sample", authorize("dce", "admin"), asyncHandler(async (req, res) => {
   const { subjectId, examEventId, count = 5 } = req.query;
   const filter = { status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED };
@@ -337,7 +225,7 @@ router.get("/dce/random-sample", authorize("dce", "admin"), asyncHandler(async (
       marks:   examEval?.scaledFinalMarks ?? aiEval?.scaledTotal ?? 0,
       max:     50,
       status:  "pending",
-      aiEvaluation:      aiEval  || null,
+      aiEvaluation:       aiEval  || null,
       examinerEvaluation: examEval || null,
     };
   }));
@@ -361,7 +249,6 @@ router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, r
     .populate("examiner", "name employeeId")
     .populate("subject", "courseCode title");
 
-  // DCE is notified only when ALL bundles for a subject are scrutinized
   const subjectMap = {};
   for (const b of bundles) {
     const key = b.subject._id.toString();
@@ -369,7 +256,6 @@ router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, r
     subjectMap[key].bundles.push(b);
   }
 
-  // For each subject, check total bundles vs scrutinized
   const result = [];
   for (const key of Object.keys(subjectMap)) {
     const allBundles = await ExternalBundle.countDocuments({ examEvent: examEvent, subject: key });
@@ -379,128 +265,22 @@ router.get("/dce/pending", authorize("dce", "admin"), asyncHandler(async (req, r
   res.json(result);
 }));
 
-router.post("/dce/review", authorize("dce", "admin"), asyncHandler(async (req, res) => {
-  const {
-    examEventId, subjectId, sampleBookletIds, reviewNotes, hasCorrections, isApproved, dceFacultyId,
-    bookletId, action, reason, yearId,
-  } = req.body;
-  const dce = dceFacultyId || req.user.roleRef;
+router.post("/dce/review", authorize("dce", "admin"), asyncHandler(dceReview));
 
-  // ── Individual booklet action from DCE random audit UI ────────────────────
-  if (bookletId && action) {
-    if (action === "approve") {
-      await ExternalExamBooklet.findByIdAndUpdate(bookletId, {
-        status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED,
-      });
-      await AuditLog.create({
-        action: "dce_approve_booklet", entity: "ExternalExamBooklet",
-        entityId: bookletId, performedBy: req.user._id, role: req.user.role,
-        details: { action }, ipAddress: req.ip,
-      });
-      return res.json({ message: "Booklet approved by DCE", bookletId, action });
-    }
-    if (action === "send_back") {
-      await ExternalExamBooklet.findByIdAndUpdate(bookletId, {
-        status: EXTERNAL_BOOKLET_STATUS.SCRUTINIZED,
-      });
-      await ExternalExaminerEvaluation.findOneAndUpdate(
-        { booklet: bookletId }, { $set: { isFrozen: false } }
-      );
-      await AuditLog.create({
-        action: "dce_send_back_booklet", entity: "ExternalExamBooklet",
-        entityId: bookletId, performedBy: req.user._id, role: req.user.role,
-        details: { action, reason }, ipAddress: req.ip,
-      });
-      return res.json({ message: "Booklet sent back to scrutinizer", bookletId, action, reason });
-    }
-    if (action === "approve_to_ce") {
-      await AuditLog.create({
-        action: "dce_approve_to_ce", entity: "AcademicYear",
-        performedBy: req.user._id, role: req.user.role,
-        details: { yearId }, ipAddress: req.ip,
-      });
-      return res.json({ message: "Year results approved for CE submission", yearId });
-    }
-    return res.status(400).json({ message: "Unknown action" });
-  }
+// DCE sends a message to an evaluator (recorded in communicationLog)
+router.post("/dce/message", authorize("dce", "admin"), asyncHandler(sendEvaluatorMessage));
 
-  // ── Batch subject review (original flow) ─────────────────────────────────
-  const review = await DCEReview.findOneAndUpdate(
-    { examEvent: examEventId, subject: subjectId },
-    {
-      examEvent: examEventId, subject: subjectId, dce,
-      sampledBooklets: sampleBookletIds || [],
-      reviewNotes, hasCorrections, isApproved,
-      approvedAt: isApproved ? new Date() : undefined,
-    },
-    { upsert: true, new: true }
-  );
-
-  if (isApproved) {
-    await ExternalBundle.updateMany(
-      { examEvent: examEventId, subject: subjectId },
-      { status: BUNDLE_STATUS.DCE_APPROVED, dceApprovedAt: new Date() }
-    );
-    await ExternalExamBooklet.updateMany(
-      { examEvent: examEventId, subject: subjectId },
-      { status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED }
-    );
-    await AuditLog.create({
-      action: "dce_approve_subject", entity: "ExternalExamBooklet",
-      performedBy: req.user._id, role: req.user.role,
-      details: { examEventId, subjectId, isApproved }, ipAddress: req.ip,
-    });
-  }
-  res.json(review);
+router.get("/dce/communication-log", authorize("dce", "admin", "examcell"), asyncHandler(async (req, res) => {
+  const { examEventId, subjectId } = req.query;
+  const review = await DCEReview.findOne({ examEvent: examEventId, subject: subjectId })
+    .populate("communicationLog.sentTo", "name employeeId");
+  if (!review) return res.status(404).json({ message: "DCE review not found" });
+  res.json(review.communicationLog);
 }));
 
 // ─── CENTRAL EXAMINER ────────────────────────────────────────────────────────
 
-router.post("/central/submit", authorize("dce", "admin"), asyncHandler(async (req, res) => {
-  const { examEventId, subjectId, dceFacultyId } = req.body;
-  const booklets = await ExternalExamBooklet.find({
-    examEvent: examEventId, subject: subjectId,
-    status: EXTERNAL_BOOKLET_STATUS.DCE_APPROVED,
-  });
-  const evals = await ExternalExaminerEvaluation.find({
-    booklet: { $in: booklets.map(b => b._id) },
-  });
-
-  const marks = evals.map(e => e.scaledFinalMarks || 0).filter(m => m > 0);
-  const total = marks.length;
-  const avg = total > 0 ? marks.reduce((a, b) => a + b, 0) / total : 0;
-  const gradeDistrib = marks.reduce((acc, m) => {
-    const pct = (m / 50) * 100;
-    if (pct >= 90) acc.O++;
-    else if (pct >= 80) acc.A++;
-    else if (pct >= 70) acc.B++;
-    else if (pct >= 60) acc.C++;
-    else if (pct >= 50) acc.D++;
-    else acc.F++;
-    return acc;
-  }, { O: 0, A: 0, B: 0, C: 0, D: 0, F: 0 });
-
-  const submission = await CentralExaminerSubmission.findOneAndUpdate(
-    { examEvent: examEventId, subject: subjectId },
-    {
-      examEvent: examEventId, subject: subjectId,
-      submittedBy: dceFacultyId || req.user.roleRef,
-      statistics: {
-        totalStudents: total, passCount: marks.filter(m => (m/50)*100 >= 45).length,
-        failCount: marks.filter(m => (m/50)*100 < 45).length,
-        averageMarks: Math.round(avg * 100) / 100,
-        highestMarks: Math.max(...marks, 0), lowestMarks: Math.min(...marks, 0),
-        gradeDistribution: gradeDistrib,
-      },
-    },
-    { upsert: true, new: true }
-  );
-  await DCEReview.findOneAndUpdate(
-    { examEvent: examEventId, subject: subjectId },
-    { statisticsSentToCE: true, statisticsSentAt: new Date() }
-  );
-  res.json(submission);
-}));
+router.post("/central/submit", authorize("dce", "admin"), asyncHandler(submitToCE));
 
 router.post("/central/declare", authorize("ce", "admin"), asyncHandler(async (req, res) => {
   const { examEventId, subjectId, ceFacultyId } = req.body;
@@ -541,7 +321,6 @@ router.get("/central/submissions", authorize("ce", "dce", "admin"), asyncHandler
     .sort("-createdAt"));
 }));
 
-// Helper
 function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));

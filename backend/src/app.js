@@ -26,6 +26,8 @@ import notificationRoutes from "./routes/notification.routes.js";
 import ocrRoutes from "./routes/ocr.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import auditLogRoutes from "./routes/auditLog.routes.js";
+import revaluationRoutes from "./routes/revaluation.routes.js";
+import analyticsRoutes from "./routes/analytics.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,6 +70,8 @@ app.use("/api/notifications",     notificationRoutes);
 app.use("/api/ocr",               ocrRoutes);
 app.use("/api/dashboard",         dashboardRoutes);
 app.use("/api/audit-logs",        auditLogRoutes);
+app.use("/api/revaluation",       revaluationRoutes);
+app.use("/api/analytics",         analyticsRoutes);
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date() }));
 
