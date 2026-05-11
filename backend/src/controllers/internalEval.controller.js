@@ -12,8 +12,9 @@ import {
   convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
 } from "../services/ocr.service.js";
 import { isQueueEnabled, enqueueBookletEvaluation } from "../services/queue.service.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
-export const aiEvaluateBooklet = async (req, res) => {
+const _aiEvaluateBooklet = async (req, res) => {
   const { bookletId } = req.params;
   const booklet = await AnswerBooklet.findById(bookletId).populate("examEvent subject");
   if (!booklet) return res.status(404).json({ message: "Booklet not found" });
@@ -72,8 +73,9 @@ export const aiEvaluateBooklet = async (req, res) => {
     await cleanupFiles(allImages);
   }
 };
+export const aiEvaluateBooklet = asyncHandler(_aiEvaluateBooklet);
 
-export const modifyMarks = async (req, res) => {
+const _modifyMarks = async (req, res) => {
   const { modifications, finalMarks } = req.body;
   const booklet = await AnswerBooklet.findById(req.params.bookletId);
   if (!booklet) return res.status(404).json({ message: "Booklet not found" });
@@ -98,8 +100,9 @@ export const modifyMarks = async (req, res) => {
   await AnswerBooklet.findByIdAndUpdate(req.params.bookletId, { status: BOOKLET_STATUS.FACULTY_REVIEWED });
   res.json(fe);
 };
+export const modifyMarks = asyncHandler(_modifyMarks);
 
-export const freezeBooklet = async (req, res) => {
+const _freezeBooklet = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -161,8 +164,9 @@ export const freezeBooklet = async (req, res) => {
     session.endSession();
   }
 };
+export const freezeBooklet = asyncHandler(_freezeBooklet);
 
-export const unfreezeBooklet = async (req, res) => {
+const _unfreezeBooklet = async (req, res) => {
   const fe = await FacultyEvaluation.findOne({ booklet: req.params.bookletId });
   if (!fe) return res.status(404).json({ message: "No evaluation found" });
   if (fe.isPermanentlyFrozen) return res.status(403).json({ message: "Cannot unfreeze permanently frozen booklet" });
@@ -172,3 +176,4 @@ export const unfreezeBooklet = async (req, res) => {
   await AnswerBooklet.findByIdAndUpdate(req.params.bookletId, { status: BOOKLET_STATUS.FACULTY_REVIEWED });
   res.json({ message: "Booklet unfrozen for modification" });
 };
+export const unfreezeBooklet = asyncHandler(_unfreezeBooklet);

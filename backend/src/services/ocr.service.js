@@ -97,6 +97,9 @@ STRICT RULE: If NOT_ATTEMPTED → marksAwarded = 0
 Return ONLY JSON starting with { and ending with }
 `;
 
+const AI_RETRY_BASE_DELAY_MS = parseInt(process.env.AI_RETRY_BASE_DELAY_MS || "2000", 10);
+const AI_RETRY_COUNT        = parseInt(process.env.AI_RETRY_COUNT        || "3",    10);
+
 export const evaluateWithGemini = async (studentImages, keyText = "", keyImages = []) => {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -114,16 +117,20 @@ export const evaluateWithGemini = async (studentImages, keyText = "", keyImages 
     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
   }
 
-  async function callGemini(retries = 3) {
-    for (let i = 0; i < retries; i++) {
+  async function callGemini() {
+    for (let i = 0; i < AI_RETRY_COUNT; i++) {
       try {
         const result = await model.generateContent({
           contents: [{ role: "user", parts }],
         });
         return result.response.text();
       } catch (err) {
-        if (i < retries - 1 && (err.status === 503 || err.message?.includes("503"))) {
-          await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+        const isRetryable = err.status === 503 || err.status === 429 ||
+          err.message?.includes("503") || err.message?.includes("429");
+        if (i < AI_RETRY_COUNT - 1 && isRetryable) {
+          const delay = AI_RETRY_BASE_DELAY_MS * Math.pow(2, i);
+          console.warn(`[OCR] Gemini transient error (attempt ${i + 1}/${AI_RETRY_COUNT}), retrying in ${delay}ms:`, err.message);
+          await new Promise(r => setTimeout(r, delay));
           continue;
         }
         throw err;
@@ -136,12 +143,14 @@ export const evaluateWithGemini = async (studentImages, keyText = "", keyImages 
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
 
   if (!jsonMatch) {
+    console.error("[OCR] Gemini did not return JSON. Raw response:", text.slice(0, 300));
     return { totalMarks: 0, maxMarks: 0, questionWise: [], mistakes: ["AI did not return JSON"], suggestions: [] };
   }
 
   try {
     return JSON.parse(jsonMatch[0]);
-  } catch {
+  } catch (err) {
+    console.error("[OCR] JSON parse failed:", err.message, "| raw excerpt:", jsonMatch[0].slice(0, 300));
     return { totalMarks: 0, maxMarks: 0, questionWise: [], mistakes: ["AI returned malformed JSON"], suggestions: [] };
   }
 };
