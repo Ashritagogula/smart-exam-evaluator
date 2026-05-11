@@ -30,6 +30,7 @@ import revaluationRoutes from "./routes/revaluation.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import queueRoutes from "./routes/queue.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
+import { generalLimiter, authLimiter, aiLimiter } from "./middleware/rateLimiter.middleware.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,11 +45,13 @@ app.use(cors({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+app.use("/api", generalLimiter);
+
 // Static file serving for uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // API Routes
-app.use("/api/auth",              authRoutes);
+app.use("/api/auth",              authLimiter, authRoutes);
 app.use("/api/colleges",          collegeRoutes);
 app.use("/api/regulations",       regulationRoutes);
 app.use("/api/academic-years",    academicYearRoutes);
@@ -62,13 +65,13 @@ app.use("/api/exam-events",       examEventRoutes);
 app.use("/api/question-papers",   questionPaperRoutes);
 app.use("/api/evaluation-schemas",evaluationSchemaRoutes);
 app.use("/api/answer-booklets",   answerBookletRoutes);
-app.use("/api/internal-eval",     internalEvalRoutes);
+app.use("/api/internal-eval",     aiLimiter, internalEvalRoutes);
 app.use("/api/cie-marks",         cieMarksRoutes);
 app.use("/api/lab-marks",         labMarksRoutes);
-app.use("/api/external-exam",     externalExamRoutes);
+app.use("/api/external-exam",     aiLimiter, externalExamRoutes);
 app.use("/api/results",           resultsRoutes);
 app.use("/api/notifications",     notificationRoutes);
-app.use("/api/ocr",               ocrRoutes);
+app.use("/api/ocr",               aiLimiter, ocrRoutes);
 app.use("/api/dashboard",         dashboardRoutes);
 app.use("/api/audit-logs",        auditLogRoutes);
 app.use("/api/revaluation",       revaluationRoutes);

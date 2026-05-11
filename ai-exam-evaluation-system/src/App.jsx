@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 import EvalModal from "./components/modals/EvalModal";
@@ -113,8 +114,12 @@ const PageRouter = ({
 
 // ── APP ROOT ────────────────────────────────────────────────
 export default function App() {
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const sec = location.pathname === "/" ? "dashboard" : location.pathname.slice(1).split("/")[0];
+  const onNav = (section) => navigate("/" + section);
+
   const [user,      setUser]      = useState(null);
-  const [sec,       setSec]       = useState("dashboard");
   const [evalModal, setEvalModal] = useState(null);
   const [modMarks,  setModMarks]  = useState({});
   const [loginForm, setLoginForm] = useState({ email:"", pass:"" });
@@ -136,7 +141,7 @@ export default function App() {
     }
 
     // Listen for forced logout (401)
-    const handleLogout = () => { setUser(null); setSec("dashboard"); };
+    const handleLogout = () => { setUser(null); navigate("/"); };
     window.addEventListener("auth:logout", handleLogout);
     return () => window.removeEventListener("auth:logout", handleLogout);
   }, []);
@@ -215,7 +220,7 @@ export default function App() {
     try {
       const { user: u } = await auth.login(loginForm.email, loginForm.pass);
       setUser(normalizeUser(u));
-      setSec("dashboard");
+      navigate("/dashboard");
     } catch (err) {
       setLoginError(err.message || "Login failed. Please check credentials.");
     }
@@ -224,7 +229,7 @@ export default function App() {
   const logout = async () => {
     await auth.logout();
     setUser(null);
-    setSec("dashboard");
+    navigate("/");
   };
 
   if (authLoading) {
@@ -256,7 +261,7 @@ export default function App() {
       <Sidebar
         role={user.role}
         active={sec}
-        onNav={setSec}
+        onNav={onNav}
         user={user}
         onLogout={logout}
       />
@@ -268,7 +273,7 @@ export default function App() {
           <PageRouter
             role={user.role}
             sec={sec}
-            onNav={setSec}
+            onNav={onNav}
             toast={toast}
             doUpload={doUpload}
             uploadPct={uploadPct}

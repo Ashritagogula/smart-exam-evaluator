@@ -8,7 +8,7 @@ start "Backend" cmd /k "cd /d D:\project_space\backend && npm run dev"
 timeout /t 3 /nobreak > nul
 
 echo [2/2] Starting Frontend (port 5173)...
-start "Frontend" cmd /k "cd /d D:\project_space\ai-exam-evaluation-system-updated\ai-exam-evaluation-system-updated\ai-exam-evaluation-system && npm run dev -- --host"
+start "Frontend" cmd /k "cd /d D:\project_space\ai-exam-evaluation-system && npm run dev -- --host"
 
 echo.
 echo ✅ Both servers starting...

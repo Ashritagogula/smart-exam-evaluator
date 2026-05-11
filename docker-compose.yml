@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: aees
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/aees
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      FRONTEND_URL: http://localhost:5173
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - uploads:/app/uploads
+
+  # Scale-out AI evaluation workers — run: docker compose up --scale ai-worker=4
+  ai-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://mongo:27017/aees
+      REDIS_URL: redis://redis:6379
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./ai-exam-evaluation-system
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  redis_data:
+  uploads:
