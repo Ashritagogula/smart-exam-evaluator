@@ -1,4 +1,5 @@
 import express from "express";
+import { body, validationResult } from "express-validator";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -12,6 +13,12 @@ import {
 
 const router = express.Router();
 router.use(authenticate);
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+  next();
+};
 
 router.get("/", asyncHandler(async (req, res) => {
   const { student, subject, academicYear, semester, isDeclared } = req.query;
@@ -39,12 +46,36 @@ router.get("/student/:studentId", asyncHandler(async (req, res) => {
   res.json(results);
 }));
 
-router.post("/compute",      authorize("examcell", "admin", "ce"), asyncHandler(computeResult));
-router.post("/compute-bulk", authorize("examcell", "admin", "ce"), asyncHandler(computeBulkResults));
-router.post("/declare",      authorize("ce", "admin"),             asyncHandler(declareResults));
-
-router.post("/apply-relative-grading",
+router.post(
+  "/compute",
   authorize("examcell", "admin", "ce"),
+  body("studentId").isMongoId().withMessage("studentId must be a valid Mongo ObjectId"),
+  body("subjectId").isMongoId().withMessage("subjectId must be a valid Mongo ObjectId"),
+  validate,
+  asyncHandler(computeResult)
+);
+
+router.post(
+  "/compute-bulk",
+  authorize("examcell", "admin", "ce"),
+  body("examEventId").isMongoId().withMessage("examEventId must be a valid Mongo ObjectId"),
+  validate,
+  asyncHandler(computeBulkResults)
+);
+
+router.post(
+  "/declare",
+  authorize("ce", "admin"),
+  body("examEventId").isMongoId().withMessage("examEventId must be a valid Mongo ObjectId"),
+  validate,
+  asyncHandler(declareResults)
+);
+
+router.post(
+  "/apply-relative-grading",
+  authorize("examcell", "admin", "ce"),
+  body("examEventId").isMongoId().withMessage("examEventId must be a valid Mongo ObjectId"),
+  validate,
   asyncHandler(applyRelativeGradingHandler)
 );
 

@@ -4,7 +4,8 @@ import College from "../models/College.js";
 
 export const authenticate = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+    // Prefer httpOnly cookie; fall back to Authorization header for API clients
+    const token = req.cookies?.au_token || req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ message: "No token provided" });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

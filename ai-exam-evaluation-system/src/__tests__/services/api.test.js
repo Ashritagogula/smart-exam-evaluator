@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-// ── Token management helpers ──────────────────────────────────────────────────
-// Import helpers directly to avoid full module init with fetch deps
+// ── Token management helpers (local stubs, not from api.js) ──────────────────
+// These test the generic localStorage pattern; api.js now uses httpOnly cookies.
 const TOKEN_KEY = "au_token";
-
 const getToken  = () => localStorage.getItem(TOKEN_KEY);
 const setToken  = (t) => localStorage.setItem(TOKEN_KEY, t);
 const removeToken = () => localStorage.removeItem(TOKEN_KEY);
 
-describe("Token management", () => {
+describe("Token management (localStorage helpers)", () => {
   beforeEach(() => localStorage.clear());
 
   it("setToken stores value in localStorage", () => {
@@ -32,7 +31,7 @@ describe("Token management", () => {
   });
 });
 
-// ── fetch wrapper behaviour ───────────────────────────────────────────────────
+// ── fetch wrapper behaviour (cookie-based auth) ───────────────────────────────
 
 describe("API request error handling", () => {
   beforeEach(() => {
@@ -49,12 +48,12 @@ describe("API request error handling", () => {
       json: async () => ({ message: "Bad request" }),
     });
 
-    // Dynamically import after stubbing fetch so the module sees the stub
     const { auth } = await import("../../services/api.js");
     await expect(auth.getMe()).rejects.toThrow("Bad request");
   });
 
-  it("dispatches auth:logout event on 401 response", async () => {
+  it("dispatches auth:logout event on 401 when refresh also fails", async () => {
+    // Both the original request AND the refresh attempt return 401
     fetch.mockResolvedValue({
       ok: false,
       status: 401,
@@ -71,8 +70,7 @@ describe("API request error handling", () => {
     await expect(eventFired).resolves.toBeDefined();
   });
 
-  it("includes Authorization header when token is present", async () => {
-    localStorage.setItem(TOKEN_KEY, "test-token");
+  it("sends credentials:include so httpOnly cookie is forwarded automatically", async () => {
     fetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -82,19 +80,22 @@ describe("API request error handling", () => {
     const { auth } = await import("../../services/api.js");
     await auth.getMe();
 
-    const calledHeaders = fetch.mock.calls[0][1].headers;
-    expect(calledHeaders["Authorization"]).toBe("Bearer test-token");
+    const fetchOptions = fetch.mock.calls[0][1];
+    expect(fetchOptions.credentials).toBe("include");
   });
 
-  it("stores token in localStorage after successful login", async () => {
+  it("login returns user data without storing a token in localStorage", async () => {
     fetch.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ token: "jwt-token-xyz", user: { id: "1", role: "faculty" } }),
+      json: async () => ({ user: { id: "1", role: "faculty" } }),
     });
 
     const { auth } = await import("../../services/api.js");
-    await auth.login("user@test.com", "pass");
-    expect(localStorage.getItem(TOKEN_KEY)).toBe("jwt-token-xyz");
+    const data = await auth.login("user@test.com", "pass");
+
+    expect(data.user.role).toBe("faculty");
+    // Cookie is managed by the browser automatically; localStorage must stay empty
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
   });
 });

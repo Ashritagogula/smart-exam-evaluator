@@ -1,26 +1,30 @@
 const BASE_URL = "/api";
 
-// Token management
-const getToken = () => localStorage.getItem("au_token");
-const setToken = (token) => localStorage.setItem("au_token", token);
-const removeToken = () => localStorage.removeItem("au_token");
+let _refreshing = null; // deduplicate concurrent refresh attempts
 
-// Base fetch wrapper
-async function request(path, options = {}) {
-  const token = getToken();
-  const headers = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
+async function tryRefresh() {
+  if (_refreshing) return _refreshing;
+  _refreshing = fetch(`${BASE_URL}/auth/refresh`, { method: "POST", credentials: "include" })
+    .then(r => r.ok)
+    .catch(() => false)
+    .finally(() => { _refreshing = null; });
+  return _refreshing;
+}
 
+// Base fetch wrapper — credentials:"include" sends/receives httpOnly cookies automatically
+async function request(path, options = {}, _retry = true) {
   const res = await fetch(`${BASE_URL}${path}`, {
+    credentials: "include",
     ...options,
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
-  if (res.status === 401) {
-    removeToken();
+  if (res.status === 401 && _retry && path !== "/auth/refresh") {
+    const refreshed = await tryRefresh();
+    if (refreshed) return request(path, options, false);
     window.dispatchEvent(new Event("auth:logout"));
   }
 
@@ -29,12 +33,11 @@ async function request(path, options = {}) {
   return data;
 }
 
-// FormData request (no Content-Type header — browser sets it)
+// FormData request (no Content-Type header — browser sets it with boundary)
 async function requestForm(path, formData, method = "POST") {
-  const token = getToken();
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
     body: formData,
   });
   const data = await res.json().catch(() => ({}));
@@ -45,23 +48,13 @@ async function requestForm(path, formData, method = "POST") {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
 export const auth = {
-  login: async (email, password) => {
-    const data = await request("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    if (data.token) setToken(data.token);
-    return data;
-  },
+  login: (email, password) =>
+    request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: async () => {
     try { await request("/auth/logout", { method: "POST" }); } catch {}
-    removeToken();
   },
   getMe: () => request("/auth/me"),
   register: (body) => request("/auth/register", { method: "POST", body: JSON.stringify(body) }),
-  getToken,
-  setToken,
-  removeToken,
 };
 
 // ─── COLLEGES ─────────────────────────────────────────────────────────────────

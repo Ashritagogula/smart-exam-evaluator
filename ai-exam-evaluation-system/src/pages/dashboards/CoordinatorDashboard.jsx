@@ -2,8 +2,9 @@
 // Subject Coordinator Dashboard — Full 4-Step Wizard
 // Uses only project-native CSS classes + inline styles. No extra imports needed.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Breadcrumb from "../../components/layout/Breadcrumb";
+import { faculty as facultyApi, students as studentsApi } from "../../services/api.js";
 
 // ── Project colour palette (matches index.css + existing dashboards) ──────────
 const C = {
@@ -35,14 +36,7 @@ const INIT_COLS = [
   { id:"c4b", label:"4b", maxMarks:5, co:"CO2", bloom:"L3", isOR:true,  orPair:"3b/4b" },
 ];
 
-// ── Mock student rows (cells blank — AI fills after upload) ───────────────────
-const STUDENT_ROWS = [
-  { sno:1, admNo:"23P31A0527", omr:"238777" },
-  { sno:2, admNo:"23P31A0528", omr:"238792" },
-  { sno:3, admNo:"23P31A0529", omr:"238787" },
-  { sno:4, admNo:"23P31A0530", omr:"238794" },
-  { sno:5, admNo:"23P31A0531", omr:"238797" },
-];
+// Student rows are loaded from the API in the main component and passed as props.
 
 const CO_OPTS = ["CO1","CO2","CO3","CO4","CO5","CO6"];
 const BL_OPTS = ["L1","L2","L3","L4","L5","L6"];
@@ -414,7 +408,7 @@ function Step2AnswerKey({ onNext, onBack, ansFile, setAnsFile }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 3 — Schema Builder (spreadsheet style, blank student rows)
 // ─────────────────────────────────────────────────────────────────────────────
-function Step3Schema({ onNext, onBack, cols, setCols }) {
+function Step3Schema({ onNext, onBack, cols, setCols, studentRows = [] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newCol, setNewCol] = useState({ label:"", maxMarks:5, co:"CO1", bloom:"L2", isOR:false, orPair:"" });
 
@@ -639,7 +633,7 @@ function Step3Schema({ onNext, onBack, cols, setCols }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 4 — Preview & Publish
 // ─────────────────────────────────────────────────────────────────────────────
-function Step4Publish({ onBack, cols, qpFile }) {
+function Step4Publish({ onBack, cols, qpFile, studentRows = [] }) {
   const [published, setPublished] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -797,18 +791,33 @@ function Step4Publish({ onBack, cols, qpFile }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT — default export (keeps the same name the project uses)
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CoordinatorDashboard() {
-  const [step,      setStep]     = useState(0);
-  const [qpFile,    setQpFile]   = useState(null);
-  const [ansFile,   setAnsFile]  = useState(null);
-  const [cols,      setCols]     = useState(INIT_COLS);
-  const [activeTab, setActiveTab]= useState("wizard");
+export default function CoordinatorDashboard({ user }) {
+  const [step,        setStep]       = useState(0);
+  const [qpFile,      setQpFile]     = useState(null);
+  const [ansFile,     setAnsFile]    = useState(null);
+  const [cols,        setCols]       = useState(INIT_COLS);
+  const [activeTab,   setActiveTab]  = useState("wizard");
+  const [subjects,    setSubjects]   = useState([]);
+  const [studentRows, setStudentRows]= useState([]);
 
-  const SUBJECTS = [
-    { id:1, code:"CS401", name:"Data Structures",   sem:"Sem 4" },
-    { id:2, code:"CS402", name:"DBMS",              sem:"Sem 4" },
-    { id:3, code:"CS403", name:"Computer Networks", sem:"Sem 4" },
-  ];
+  useEffect(() => {
+    const facultyId = user?.profile?._id || user?.roleRef;
+    if (facultyId) {
+      facultyApi.getMappings(facultyId)
+        .then(data => setSubjects(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }
+    studentsApi.list()
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        setStudentRows(list.slice(0, 8).map((s, i) => ({
+          sno: i + 1,
+          admNo: s.rollNumber || s._id,
+          omr: s._id?.toString().slice(-6).toUpperCase() || "——",
+        })));
+      })
+      .catch(() => {});
+  }, [user]);
 
   const schemaPublished = step >= 3;
 
@@ -824,7 +833,7 @@ export default function CoordinatorDashboard() {
 
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:14, marginBottom:20 }}>
-        <MiniStat value={SUBJECTS.length}       label="Subjects Coordinating" icon="📚" color={C.navy}  />
+        <MiniStat value={subjects.length}        label="Subjects Coordinating" icon="📚" color={C.navy}  />
         <MiniStat value={qpFile?1:0}            label="QPs Uploaded"          icon="📄" color={C.blue}  />
         <MiniStat value={ansFile?1:0}           label="Answer Keys Uploaded"  icon="📋" color={C.gold}  />
         <MiniStat value={schemaPublished?1:0}   label="Schemas Published"     icon="📊" color={C.green} />
@@ -864,8 +873,8 @@ export default function CoordinatorDashboard() {
             <StepBar step={step} />
             {step===0 && <Step1UploadQP onNext={()=>setStep(1)} qpFile={qpFile} setQpFile={setQpFile} />}
             {step===1 && <Step2AnswerKey onNext={()=>setStep(2)} onBack={()=>setStep(0)} ansFile={ansFile} setAnsFile={setAnsFile} />}
-            {step===2 && <Step3Schema onNext={()=>setStep(3)} onBack={()=>setStep(1)} cols={cols} setCols={setCols} />}
-            {step===3 && <Step4Publish onBack={()=>setStep(2)} cols={cols} qpFile={qpFile} />}
+            {step===2 && <Step3Schema onNext={()=>setStep(3)} onBack={()=>setStep(1)} cols={cols} setCols={setCols} studentRows={studentRows} />}
+            {step===3 && <Step4Publish onBack={()=>setStep(2)} cols={cols} qpFile={qpFile} studentRows={studentRows} />}
           </>
         )}
 
@@ -874,11 +883,13 @@ export default function CoordinatorDashboard() {
           <>
             <div style={{ fontWeight:800, fontSize:16, color:C.text, marginBottom:16 }}>My Assigned Subjects</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:14 }}>
-              {[
-                { code:"2501PH02", name:"Modern Physics",   sem:"Sem 1", schemaOk:schemaPublished, qpOk:!!qpFile },
-                { code:"CS402",    name:"DBMS",             sem:"Sem 4", schemaOk:false, qpOk:false },
-                { code:"CS405",    name:"Algorithms",       sem:"Sem 5", schemaOk:false, qpOk:false },
-              ].map((s,i)=>(
+              {(subjects.length > 0 ? subjects.map(m => ({
+                code: m.subject?.courseCode || m.subject?.code || "—",
+                name: m.subject?.title || m.subject?.name || "Subject",
+                sem:  m.semester?.name  || "—",
+                schemaOk: false, qpOk: false,
+              })) : [{ code:"—", name:"No subjects assigned yet", sem:"—", schemaOk:false, qpOk:false }])
+              .map((s,i)=>(
                 <div key={i} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:12,
                   padding:"16px 18px", cursor:"pointer", transition:"box-shadow .2s",
                   borderTop:`3px solid ${s.schemaOk?C.green:s.qpOk?C.blue:C.gold}` }}

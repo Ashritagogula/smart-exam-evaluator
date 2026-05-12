@@ -4,8 +4,42 @@ import Faculty from "../models/Faculty.js";
 import Student from "../models/Student.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-const signToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || "7d" });
+const ACCESS_COOKIE  = "au_token";
+const REFRESH_COOKIE = "au_refresh";
+
+const ACCESS_TTL_SEC  = 15 * 60;           // 15 minutes
+const REFRESH_TTL_SEC = 7 * 24 * 60 * 60; // 7 days
+
+const cookieBase = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict",
+};
+
+const signAccess  = (id) => jwt.sign({ id, type: "access"  }, process.env.JWT_SECRET, { expiresIn: ACCESS_TTL_SEC  });
+const signRefresh = (id) => jwt.sign({ id, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: REFRESH_TTL_SEC });
+
+function setAuthCookies(res, userId) {
+  res.cookie(ACCESS_COOKIE,  signAccess(userId),  { ...cookieBase, maxAge: ACCESS_TTL_SEC  * 1000 });
+  res.cookie(REFRESH_COOKIE, signRefresh(userId), { ...cookieBase, maxAge: REFRESH_TTL_SEC * 1000, path: "/api/auth/refresh" });
+}
+
+async function resolveProfile(user) {
+  if (!user.roleRef) return null;
+  if (user.roleModel === "Faculty") {
+    return Faculty.findById(user.roleRef)
+      .populate("department", "name code")
+      .populate("sectionsMapped", "name")
+      .lean();
+  }
+  if (user.roleModel === "Student") {
+    return Student.findById(user.roleRef)
+      .populate("department", "name code")
+      .populate("section", "name")
+      .lean();
+  }
+  return null;
+}
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -18,25 +52,10 @@ export const login = asyncHandler(async (req, res) => {
 
   await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
 
-  // Populate role-specific profile
-  let profile = null;
-  if (user.roleRef) {
-    if (user.roleModel === "Faculty") {
-      profile = await Faculty.findById(user.roleRef)
-        .populate("department", "name code")
-        .populate("sectionsMapped", "name")
-        .lean();
-    } else if (user.roleModel === "Student") {
-      profile = await Student.findById(user.roleRef)
-        .populate("department", "name code")
-        .populate("section", "name")
-        .lean();
-    }
-  }
+  const profile = await resolveProfile(user);
+  setAuthCookies(res, user._id);
 
-  const token = signToken(user._id);
   res.json({
-    token,
     user: {
       id: user._id,
       email: user.email,
@@ -80,14 +99,36 @@ export const register = asyncHandler(async (req, res) => {
     roleModel = "Student";
   }
 
-  const user = await User.create({ email, password, name, role, roleRef, roleModel });
+  const newUser = await User.create({ email, password, name, role, roleRef, roleModel });
   if (roleRef) {
     const Model = roleModel === "Faculty" ? Faculty : Student;
-    await Model.findByIdAndUpdate(roleRef, { user: user._id });
+    await Model.findByIdAndUpdate(roleRef, { user: newUser._id });
   }
 
-  const token = signToken(user._id);
-  res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role } });
+  setAuthCookies(res, newUser._id);
+  res.status(201).json({ user: { id: newUser._id, email: newUser.email, name: newUser.name, role: newUser.role } });
+});
+
+// Rotate access token using the long-lived refresh cookie
+export const refresh = asyncHandler(async (req, res) => {
+  const token = req.cookies?.[REFRESH_COOKIE];
+  if (!token) return res.status(401).json({ message: "No refresh token" });
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ message: "Refresh token invalid or expired" });
+  }
+
+  if (decoded.type !== "refresh") return res.status(401).json({ message: "Invalid token type" });
+
+  const user = await User.findById(decoded.id).select("-password");
+  if (!user || !user.isActive) return res.status(401).json({ message: "User not found or inactive" });
+
+  // Issue new access token only (refresh token stays valid until its own expiry)
+  res.cookie(ACCESS_COOKIE, signAccess(user._id), { ...cookieBase, maxAge: ACCESS_TTL_SEC * 1000 });
+  res.json({ message: "Token refreshed" });
 });
 
 export const getMe = asyncHandler(async (req, res) => {
@@ -101,5 +142,7 @@ export const getMe = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (req, res) => {
+  res.clearCookie(ACCESS_COOKIE,  { ...cookieBase });
+  res.clearCookie(REFRESH_COOKIE, { ...cookieBase, path: "/api/auth/refresh" });
   res.json({ message: "Logged out successfully" });
 });
