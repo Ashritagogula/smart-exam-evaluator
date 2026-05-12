@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/layout/Breadcrumb";
-import { answerBooklets } from "../services/api.js";
+import { answerBooklets, scriptView } from "../services/api.js";
 
 const C = {
   navy: "#002366", blue: "#0077b6", gold: "#f7941d",
@@ -158,6 +159,7 @@ function ScriptModal({ booklet, onClose }) {
 }
 
 const ScriptViewPage = ({ user }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [booklets, setBooklets] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [viewing,  setViewing]  = useState(null);
@@ -167,18 +169,31 @@ const ScriptViewPage = ({ user }) => {
 
   useEffect(() => {
     if (!studentId) { setLoading(false); return; }
+    const bid = searchParams.get("booklet");
     answerBooklets.list({ student: studentId })
-      .then(data => setBooklets(Array.isArray(data) ? data : []))
+      .then(data => {
+        const arr = Array.isArray(data) ? data : [];
+        setBooklets(arr);
+        if (bid) {
+          const match = arr.find(b => b._id === bid);
+          if (match) {
+            setDetailLoading(true);
+            scriptView.getInternalBooklet(match._id)
+              .then(detail => setViewing(detail))
+              .catch(() => setViewing(match))
+              .finally(() => setDetailLoading(false));
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [studentId]);
 
   const openScript = async (booklet) => {
     setDetailLoading(true);
+    setSearchParams({ booklet: booklet._id }, { replace: true });
     try {
-      const detail = await fetch(`/api/answer-booklets/${booklet._id}/view`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("au_token")}` },
-      }).then(r => r.json());
+      const detail = await scriptView.getInternalBooklet(booklet._id);
       setViewing(detail);
     } catch {
       setViewing(booklet);
@@ -187,9 +202,14 @@ const ScriptViewPage = ({ user }) => {
     }
   };
 
+  const closeScript = () => {
+    setViewing(null);
+    setSearchParams({}, { replace: true });
+  };
+
   return (
     <div style={{ maxWidth: 840 }}>
-      {viewing && <ScriptModal booklet={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <ScriptModal booklet={viewing} onClose={closeScript} />}
 
       <Breadcrumb items={["Student Portal", "My Answer Scripts"]} />
       <div style={{ fontWeight: 800, fontSize: 18, color: C.text, marginBottom: 4 }}>My Answer Scripts</div>

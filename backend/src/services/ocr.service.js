@@ -100,12 +100,23 @@ Return ONLY JSON starting with { and ending with }
 const AI_RETRY_BASE_DELAY_MS = parseInt(process.env.AI_RETRY_BASE_DELAY_MS || "2000", 10);
 const AI_RETRY_COUNT        = parseInt(process.env.AI_RETRY_COUNT        || "3",    10);
 
-export const evaluateWithGemini = async (studentImages, keyText = "", keyImages = []) => {
+const SUPPORTED_LANGUAGES = new Set(["english", "telugu", "hindi", "tamil", "kannada"]);
+
+function getLanguageInstruction(language) {
+  if (!language || language === "auto") return "";
+  const lang = language.toLowerCase();
+  if (!SUPPORTED_LANGUAGES.has(lang)) return "";
+  const cap = lang.charAt(0).toUpperCase() + lang.slice(1);
+  return `\n\nLANGUAGE: The student answer sheet is written in ${cap}. Accurately interpret handwritten ${cap} script, transliteration, and regional terminology when evaluating answers.\n`;
+}
+
+export const evaluateWithGemini = async (studentImages, keyText = "", keyImages = [], language = "auto") => {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+  const langInstruction = getLanguageInstruction(language);
   const parts = [];
-  parts.push({ text: `${basePrompt}\n\nANSWER KEY:\n${keyText || "Answer key is provided in images"}` });
+  parts.push({ text: `${basePrompt}${langInstruction}\n\nANSWER KEY:\n${keyText || "Answer key is provided in images"}` });
 
   for (const img of keyImages) {
     const base64 = await imageToBase64(img);
