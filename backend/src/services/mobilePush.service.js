@@ -10,9 +10,25 @@
  *   FCM_PROJECT_ID   — Firebase project ID
  */
 
-const FCM_URL        = "https://fcm.googleapis.com/fcm/send";
-const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || "";
-const FCM_PROJECT_ID = process.env.FCM_PROJECT_ID || "";
+const FCM_URL         = "https://fcm.googleapis.com/fcm/send";
+const FCM_SERVER_KEY  = process.env.FCM_SERVER_KEY  || "";
+const FCM_PROJECT_ID  = process.env.FCM_PROJECT_ID  || "";
+const FCM_TIMEOUT_MS  = parseInt(process.env.FCM_TIMEOUT_MS  || "8000", 10);
+const FCM_MAX_RETRIES = parseInt(process.env.FCM_MAX_RETRIES || "3",    10);
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FCM_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === "AbortError")
+      throw Object.assign(new Error(`FCM request timed out after ${FCM_TIMEOUT_MS}ms`), { isTimeout: true });
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const NOTIFICATION_TEMPLATES = {
   freeze: {
@@ -47,20 +63,30 @@ async function sendFCMRequest(payload) {
     return { skipped: true };
   }
 
-  const res = await fetch(FCM_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `key=${FCM_SERVER_KEY}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`FCM error [${res.status}]: ${text}`);
+  for (let attempt = 0; attempt < FCM_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetchWithTimeout(FCM_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `key=${FCM_SERVER_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw Object.assign(new Error(`FCM error [${res.status}]: ${text}`), { status: res.status });
+      }
+      return res.json();
+    } catch (err) {
+      const isTransient = err.isTimeout || !err.status || err.status >= 500;
+      if (attempt < FCM_MAX_RETRIES - 1 && isTransient) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw err;
+    }
   }
-  return res.json();
 }
 
 /**
