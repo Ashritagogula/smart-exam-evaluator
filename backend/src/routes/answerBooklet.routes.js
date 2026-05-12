@@ -1,4 +1,5 @@
 import express from "express";
+import { body, param, validationResult } from "express-validator";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 import { uploadBooklets } from "../middleware/upload.middleware.js";
@@ -10,6 +11,12 @@ import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 router.use(authenticate);
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+  next();
+};
 
 router.get("/", asyncHandler(async (req, res) => {
   const { examEvent, faculty, status, subject, student } = req.query;
@@ -33,7 +40,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
   res.json(b);
 }));
 
-// Script view — returns booklet details + evaluation data for student/faculty to view the script
+// Script view
 router.get("/:id/view", asyncHandler(async (req, res) => {
   const b = await AnswerBooklet.findById(req.params.id)
     .populate("student", "name rollNumber")
@@ -98,27 +105,39 @@ router.post("/upload-bulk", authorize("clerk", "examcell", "admin"), (req, res, 
 }));
 
 // Assign booklet to faculty
-router.patch("/:id/assign", authorize("clerk", "examcell", "admin"), asyncHandler(async (req, res) => {
-  const { facultyId } = req.body;
-  const b = await AnswerBooklet.findByIdAndUpdate(req.params.id, {
-    assignedFaculty: facultyId,
-    assignmentDate: new Date(),
-  }, { new: true });
-  res.json(b);
-}));
+router.patch(
+  "/:id/assign",
+  authorize("clerk", "examcell", "admin"),
+  param("id").isMongoId().withMessage("Invalid booklet id"),
+  body("facultyId").isMongoId().withMessage("facultyId must be a valid Mongo ObjectId"),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { facultyId } = req.body;
+    const b = await AnswerBooklet.findByIdAndUpdate(req.params.id, {
+      assignedFaculty: facultyId,
+      assignmentDate: new Date(),
+    }, { new: true });
+    if (!b) return res.status(404).json({ message: "Booklet not found" });
+    res.json(b);
+  })
+);
 
 // Bulk assign booklets to a faculty
-router.post("/bulk-assign", authorize("clerk", "examcell", "admin"), asyncHandler(async (req, res) => {
-  const { bookletIds, facultyId } = req.body;
-  if (!Array.isArray(bookletIds) || !bookletIds.length)
-    return res.status(400).json({ message: "bookletIds must be a non-empty array" });
-  if (!facultyId)
-    return res.status(400).json({ message: "facultyId is required" });
-  await AnswerBooklet.updateMany(
-    { _id: { $in: bookletIds } },
-    { assignedFaculty: facultyId, assignmentDate: new Date() }
-  );
-  res.json({ message: `${bookletIds.length} booklets assigned` });
-}));
+router.post(
+  "/bulk-assign",
+  authorize("clerk", "examcell", "admin"),
+  body("bookletIds").isArray({ min: 1 }).withMessage("bookletIds must be a non-empty array"),
+  body("bookletIds.*").isMongoId().withMessage("Each bookletId must be a valid Mongo ObjectId"),
+  body("facultyId").isMongoId().withMessage("facultyId must be a valid Mongo ObjectId"),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { bookletIds, facultyId } = req.body;
+    await AnswerBooklet.updateMany(
+      { _id: { $in: bookletIds } },
+      { assignedFaculty: facultyId, assignmentDate: new Date() }
+    );
+    res.json({ message: `${bookletIds.length} booklets assigned` });
+  })
+);
 
 export default router;

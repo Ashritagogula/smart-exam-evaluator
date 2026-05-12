@@ -1,7 +1,11 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import swaggerUi from "swagger-ui-express";
 import path from "path";
 import { fileURLToPath } from "url";
+import { swaggerSpec } from "./swagger.js";
 
 import authRoutes from "./routes/auth.routes.js";
 import collegeRoutes from "./routes/college.routes.js";
@@ -37,6 +41,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "same-site" },
+  contentSecurityPolicy: false, // handled by frontend; disable to avoid breaking the SPA
+}));
+
 app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:5173",
   credentials: true,
@@ -44,6 +53,7 @@ app.use(cors({
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(cookieParser());
 
 app.use("/api", generalLimiter);
 
@@ -77,6 +87,9 @@ app.use("/api/audit-logs",        auditLogRoutes);
 app.use("/api/revaluation",       revaluationRoutes);
 app.use("/api/analytics",         analyticsRoutes);
 app.use("/api/queue",             queueRoutes);
+
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: "AEES API Docs" }));
+app.get("/api/docs.json", (req, res) => res.json(swaggerSpec));
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date() }));
 
