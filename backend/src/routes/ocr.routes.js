@@ -18,6 +18,7 @@ router.post("/evaluate", (req, res, next) => {
   const file = req.files?.["file"]?.[0];
   const keyFile = req.files?.["answerKeyFile"]?.[0];
   const keyText = req.body.answerKeyText || "";
+  const language = req.body.language || "auto";
   let options = null;
   try { options = req.body.options ? JSON.parse(req.body.options) : null; } catch {}
 
@@ -34,7 +35,7 @@ router.post("/evaluate", (req, res, next) => {
     allImages.push(...rawImages);
     const studentImages = filterUsefulImages(rawImages);
 
-    const result = await evaluateWithGemini(studentImages, keyText, keyImages);
+    const result = await evaluateWithGemini(studentImages, keyText, keyImages, language);
     res.json({ result });
   } finally {
     await cleanupFiles(allImages);

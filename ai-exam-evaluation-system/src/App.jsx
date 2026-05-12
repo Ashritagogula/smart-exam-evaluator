@@ -73,6 +73,10 @@ const ComingSoon = () => (
   </div>
 );
 
+// Client-side route guard — redirects unauthorised roles to their dashboard
+const Guard = ({ allowed, role, children }) =>
+  allowed.includes(role) ? children : <Navigate to="/dashboard" replace />;
+
 // ── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const navigate = useNavigate();
@@ -90,15 +94,11 @@ export default function App() {
   const [loginError,  setLoginError]  = useState("");
 
   useEffect(() => {
-    const token = auth.getToken();
-    if (token) {
-      auth.getMe()
-        .then(({ user: u }) => setUser(normalizeUser(u)))
-        .catch(() => auth.removeToken())
-        .finally(() => setAuthLoading(false));
-    } else {
-      setAuthLoading(false);
-    }
+    // Cookie is sent automatically; just probe /me to restore session
+    auth.getMe()
+      .then(({ user: u }) => setUser(normalizeUser(u)))
+      .catch(() => {})
+      .finally(() => setAuthLoading(false));
 
     const handleLogout = () => { setUser(null); navigate("/"); };
     window.addEventListener("auth:logout", handleLogout);
@@ -139,8 +139,8 @@ export default function App() {
 
   const doUpload = (formData) =>
     new Promise((resolve, reject) => {
-      const token = localStorage.getItem("au_token");
       const xhr = new XMLHttpRequest();
+      xhr.withCredentials = true; // sends the httpOnly au_token cookie
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 95));
@@ -167,7 +167,6 @@ export default function App() {
 
       setUploadPct(0);
       xhr.open("POST", "/api/answer-booklets/upload-bulk");
-      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       xhr.send(formData);
     });
 
@@ -232,24 +231,68 @@ export default function App() {
             } />
             <Route path="/labs"        element={<FacultyDashboard setEvalModal={setEvalModal} sec="labs" user={user} />} />
             <Route path="/assigned"    element={<EvaluatePage user={user} />} />
-            <Route path="/sc_upload"   element={<CoordinatorDashboard user={user} />} />
-            <Route path="/upload"      element={<UploadPage doUpload={doUpload} uploadPct={uploadPct} user={user} />} />
+            <Route path="/sc_upload"   element={
+              <Guard allowed={["subject_coordinator","admin"]} role={role}>
+                <CoordinatorDashboard user={user} />
+              </Guard>
+            } />
+            <Route path="/upload"      element={
+              <Guard allowed={["clerk","examcell","admin"]} role={role}>
+                <UploadPage doUpload={doUpload} uploadPct={uploadPct} user={user} />
+              </Guard>
+            } />
             <Route path="/exams"       element={<ExamsPage toast={toast} user={user} />} />
             <Route path="/users"       element={<UsersPage toast={toast} user={user} onNav={onNav} />} />
             <Route path="/results"     element={<ResultsPage toast={toast} role={role} user={user} />} />
             <Route path="/feedback"    element={<FeedbackPage user={user} />} />
             <Route path="/departments" element={<DepartmentsPage user={user} />} />
             <Route path="/department"  element={<DepartmentsPage user={user} />} />
-            <Route path="/faculty"     element={role === "hod" ? <HODFacultyPage user={user} /> : <ComingSoon />} />
+            <Route path="/faculty"     element={
+              <Guard allowed={["hod","admin","examcell"]} role={role}>
+                <HODFacultyPage user={user} />
+              </Guard>
+            } />
             <Route path="/analytics"   element={<AnalyticsPage user={user} />} />
-            <Route path="/setup"       element={role === "admin" ? <AdminSetupPage user={user} /> : <ComingSoon />} />
-            <Route path="/colleges"    element={role === "admin" ? <CollegesPage user={user} /> : <ComingSoon />} />
-            <Route path="/examusers"   element={<ManageUsersPage user={user} />} />
-            <Route path="/cie"         element={<CIEMarksPage user={user} />} />
-            <Route path="/my_scripts"  element={<ScriptViewPage user={user} />} />
-            <Route path="/dce_random"  element={<DCEDashboard sec="random" user={user} />} />
-            <Route path="/dce_notif"   element={<DCEDashboard sec="notif"  user={user} />} />
-            <Route path="/ce_notif"    element={<CEDashboard  sec="notif"  user={user} />} />
+            <Route path="/setup"       element={
+              <Guard allowed={["admin"]} role={role}>
+                <AdminSetupPage user={user} />
+              </Guard>
+            } />
+            <Route path="/colleges"    element={
+              <Guard allowed={["admin"]} role={role}>
+                <CollegesPage user={user} />
+              </Guard>
+            } />
+            <Route path="/examusers"   element={
+              <Guard allowed={["examcell","admin"]} role={role}>
+                <ManageUsersPage user={user} />
+              </Guard>
+            } />
+            <Route path="/cie"         element={
+              <Guard allowed={["faculty","subject_coordinator","hod","examcell","admin"]} role={role}>
+                <CIEMarksPage user={user} />
+              </Guard>
+            } />
+            <Route path="/my_scripts"  element={
+              <Guard allowed={["student"]} role={role}>
+                <ScriptViewPage user={user} />
+              </Guard>
+            } />
+            <Route path="/dce_random"  element={
+              <Guard allowed={["dce","admin"]} role={role}>
+                <DCEDashboard sec="random" user={user} />
+              </Guard>
+            } />
+            <Route path="/dce_notif"   element={
+              <Guard allowed={["dce","admin"]} role={role}>
+                <DCEDashboard sec="notif" user={user} />
+              </Guard>
+            } />
+            <Route path="/ce_notif"    element={
+              <Guard allowed={["ce","admin"]} role={role}>
+                <CEDashboard sec="notif" user={user} />
+              </Guard>
+            } />
             <Route path="*"            element={<ComingSoon />} />
           </Routes>
         </div>

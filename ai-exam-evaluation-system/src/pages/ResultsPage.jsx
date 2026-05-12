@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, AUTable } from "../components/ui/Card";
 import { GoldBtn, OutlineBtn } from "../components/ui/Buttons";
 import Badge from "../components/ui/Badge";
@@ -294,6 +295,7 @@ const AnalyticsModal = ({ subjectId, subjectTitle, onClose }) => {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const ResultsPage = ({ toast, role, user }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [examEvents,     setExamEvents]    = useState([]);
   const [studentResults, setStudentResults] = useState([]);
   const [loading,        setLoading]       = useState(true);
@@ -312,11 +314,28 @@ const ResultsPage = ({ toast, role, user }) => {
         .finally(() => setLoading(false));
     } else {
       examEventsApi.list()
-        .then(events => setExamEvents(events || []))
+        .then(events => {
+          setExamEvents(events || []);
+          const eid = searchParams.get("event");
+          if (eid) {
+            const match = (events || []).find(e => e._id === eid);
+            if (match) setComputeEvent(match);
+          }
+        })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
   }, [isStudent, studentId]);
+
+  const openCompute = (event) => {
+    setComputeEvent(event);
+    setSearchParams({ event: event._id }, { replace: true });
+  };
+
+  const closeCompute = () => {
+    setComputeEvent(null);
+    setSearchParams({}, { replace: true });
+  };
 
   const handleDeclared = (eventId) => {
     setExamEvents(prev => prev.map(e => e._id === eventId ? { ...e, resultsPublished: true } : e));
@@ -372,7 +391,7 @@ const ResultsPage = ({ toast, role, user }) => {
       {computeEvent && (
         <ComputeModal
           event={computeEvent}
-          onClose={() => setComputeEvent(null)}
+          onClose={closeCompute}
           onDeclared={handleDeclared}
           toast={toast}
         />
@@ -438,7 +457,7 @@ const ResultsPage = ({ toast, role, user }) => {
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {canCompute && (
                         <GoldBtn
-                          onClick={() => setComputeEvent(e)}
+                          onClick={() => openCompute(e)}
                           style={{ padding: "4px 12px", fontSize: 11 }}
                         >
                           {e.resultsPublished ? "Re-Compute" : "Compute & Declare"}

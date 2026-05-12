@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { examEvents as examEventsApi } from "../services/api.js";
 import { Card, AUTable } from "../components/ui/Card";
 import { GoldBtn, OutlineBtn } from "../components/ui/Buttons";
@@ -13,6 +14,7 @@ import EditExamModal   from "./exams/EditExamModal.jsx";
 const EXAM_STATUSES = ["upcoming", "active", "completed", "cancelled"];
 
 const ExamsPage = ({ toast }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [show,      setShow]      = useState(false);
   const [exams,     setExams]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -22,10 +24,28 @@ const ExamsPage = ({ toast }) => {
 
   useEffect(() => {
     examEventsApi.list()
-      .then(list => setExams(Array.isArray(list) ? list : []))
+      .then(list => {
+        const arr = Array.isArray(list) ? list : [];
+        setExams(arr);
+        const id = searchParams.get("id");
+        if (id) {
+          const match = arr.find(e => e._id === id);
+          if (match) setViewExam(match);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const openView = (exam) => {
+    setViewExam(exam);
+    setSearchParams({ id: exam._id }, { replace: true });
+  };
+
+  const closeView = () => {
+    setViewExam(null);
+    setSearchParams({}, { replace: true });
+  };
 
   const handleStatusChange = async (id, status) => {
     setStatusMap(p => ({ ...p, [id]: status }));
@@ -47,7 +67,7 @@ const ExamsPage = ({ toast }) => {
     <div className="page-anim">
       <Breadcrumb items={["Exam Cell", "Examinations"]} />
 
-      {viewExam && <ExamDetailModal exam={viewExam} onClose={() => setViewExam(null)} />}
+      {viewExam && <ExamDetailModal exam={viewExam} onClose={closeView} />}
       {editExam  && <EditExamModal  exam={editExam}  onClose={() => setEditExam(null)} onSaved={handleSaved} toast={toast} />}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -103,7 +123,7 @@ const ExamsPage = ({ toast }) => {
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 5 }}>
-                    <OutlineBtn style={{ fontSize: "11px", padding: "4px 10px" }} onClick={() => setViewExam(e)}>View</OutlineBtn>
+                    <OutlineBtn style={{ fontSize: "11px", padding: "4px 10px" }} onClick={() => openView(e)}>View</OutlineBtn>
                     <button onClick={() => setEditExam(e)}
                       style={{ background: C.blueLight, border: `1px solid ${C.border}`, color: C.navy, borderRadius: 5, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                       Edit

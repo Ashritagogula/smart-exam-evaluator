@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { BarChart, DonutChart, LineSparkline } from "../components/ui/Charts";
 import Breadcrumb from "../components/layout/Breadcrumb";
 import { dashboard as dashboardApi, results as resultsApi, examEvents as examEventsApi } from "../services/api.js";
 
 const AnalyticsPage = ({ user }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [overview,  setOverview]  = useState(null);
   const [results,   setResults]   = useState([]);
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [selectedSubject, setSelectedSubject] = useState(searchParams.get("subject") || "");
 
   useEffect(() => {
     Promise.all([
@@ -18,29 +21,48 @@ const AnalyticsPage = ({ user }) => {
     ])
       .then(([ov, res, ev]) => {
         setOverview(ov);
-        setResults(res);
-        setEvents(ev);
+        setResults(Array.isArray(res) ? res : []);
+        setEvents(Array.isArray(ev) ? ev : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  const handleSubjectChange = (subjectId) => {
+    setSelectedSubject(subjectId);
+    if (subjectId) setSearchParams({ subject: subjectId }, { replace: true });
+    else setSearchParams({}, { replace: true });
+  };
+
+  // Unique subjects from loaded events
+  const subjectOptions = events.reduce((acc, e) => {
+    (e.subjects || []).forEach(s => {
+      if (s._id && !acc.find(o => o._id === s._id)) acc.push(s);
+    });
+    return acc;
+  }, []);
+
+  // Apply subject filter
+  const filteredResults = selectedSubject
+    ? results.filter(r => (r.subject?._id || r.subject) === selectedSubject)
+    : results;
+
   // Grade distribution from real results
   const GRADES = ["O","A+","A","B+","B","C","D","F"];
   const gradeCounts = GRADES.map(g => ({
     l: g,
-    v: results.filter(r => r.grade === g).length,
+    v: filteredResults.filter(r => r.grade === g).length,
   }));
 
   // Pass/Fail split
-  const total  = results.length;
-  const passed = results.filter(r => r.isPassed).length;
+  const total  = filteredResults.length;
+  const passed = filteredResults.filter(r => r.isPassed).length;
   const failed = total - passed;
   const passPct = total > 0 ? Math.round((passed / total) * 100) : 0;
 
   // Avg marks per declared result
   const avgMarks = total > 0
-    ? Math.round(results.reduce((a, r) => a + (r.grandTotal || 0), 0) / total)
+    ? Math.round(filteredResults.reduce((a, r) => a + (r.grandTotal || 0), 0) / total)
     : 0;
 
   // Booklet progress trend (spread totalBooklets across 9 points)
@@ -49,17 +71,50 @@ const AnalyticsPage = ({ user }) => {
     Math.round(bookletBase * f)
   );
 
-  // AI vs faculty agreement buckets from declared results
-  const fullAgree  = results.filter(r => r.grandTotal >= 80).length;
-  const minorDiff  = results.filter(r => r.grandTotal >= 60 && r.grandTotal < 80).length;
-  const modDiff    = results.filter(r => r.grandTotal >= 40 && r.grandTotal < 60).length;
-  const majorDiff  = results.filter(r => r.grandTotal < 40).length;
+  // Performance bands from declared results
+  const fullAgree  = filteredResults.filter(r => r.grandTotal >= 80).length;
+  const minorDiff  = filteredResults.filter(r => r.grandTotal >= 60 && r.grandTotal < 80).length;
+  const modDiff    = filteredResults.filter(r => r.grandTotal >= 40 && r.grandTotal < 60).length;
+  const majorDiff  = filteredResults.filter(r => r.grandTotal < 40).length;
 
   const agreePct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
 
   return (
     <div className="page-anim">
       <Breadcrumb items={["Analytics", "Performance Reports"]} />
+
+      {/* Subject filter with URL-backed state */}
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: "#6478a0" }}>Filter by Subject:</label>
+        <select
+          value={selectedSubject}
+          onChange={e => handleSubjectChange(e.target.value)}
+          style={{
+            padding: "5px 10px", fontSize: 12, borderRadius: 6,
+            border: "1px solid #d0daf0", outline: "none",
+            background: "#fff", color: "#1a2744", cursor: "pointer", fontFamily: "inherit",
+          }}
+        >
+          <option value="">All Subjects</option>
+          {subjectOptions.map(s => (
+            <option key={s._id} value={s._id}>
+              {s.courseCode ? `${s.courseCode} — ` : ""}{s.title || s.courseCode || s._id}
+            </option>
+          ))}
+        </select>
+        {selectedSubject && (
+          <button
+            onClick={() => handleSubjectChange("")}
+            style={{
+              fontSize: 11, color: "#6478a0", background: "none",
+              border: "1px solid #d0daf0", borderRadius: 5, padding: "4px 8px",
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
       <div className="stats-grid" style={{ marginBottom:"16px" }}>
         {[
