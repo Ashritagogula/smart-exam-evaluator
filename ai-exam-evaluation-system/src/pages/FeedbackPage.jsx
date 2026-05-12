@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { ProgressBar } from "../components/ui/Charts";
 import Badge from "../components/ui/Badge";
@@ -6,6 +7,7 @@ import Breadcrumb from "../components/layout/Breadcrumb";
 import { internalEval, answerBooklets } from "../services/api.js";
 
 const FeedbackPage = ({ user }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [booklets,  setBooklets]  = useState([]);
   const [selected,  setSelected]  = useState(null);
   const [aiEval,    setAiEval]    = useState(null);
@@ -20,7 +22,9 @@ const FeedbackPage = ({ user }) => {
       .then(bs => {
         const evaluated = bs.filter(b => ["ai_evaluated","faculty_reviewed","frozen","permanently_frozen"].includes(b.status));
         setBooklets(evaluated);
-        if (evaluated.length > 0) loadEval(evaluated[0]);
+        const bid = searchParams.get("booklet");
+        const initial = bid ? evaluated.find(b => b._id === bid) : null;
+        if (initial || evaluated.length > 0) loadEval(initial || evaluated[0]);
       })
       .catch((err) => console.error("[FeedbackPage] Failed to load booklets:", err))
       .finally(() => setLoading(false));
@@ -28,6 +32,7 @@ const FeedbackPage = ({ user }) => {
 
   const loadEval = (booklet) => {
     setSelected(booklet);
+    setSearchParams({ booklet: booklet._id }, { replace: true });
     setAiEval(null);
     setFacEval(null);
     setEvalLoading(true);

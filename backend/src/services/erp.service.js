@@ -6,43 +6,73 @@
  * All outbound calls use the configured ERP_BASE_URL environment variable.
  */
 
-const ERP_BASE_URL   = process.env.ERP_BASE_URL   || "";
-const ERP_API_KEY    = process.env.ERP_API_KEY     || "";
-const LMS_BASE_URL   = process.env.LMS_BASE_URL    || "";
-const LMS_API_KEY    = process.env.LMS_API_KEY     || "";
+const ERP_BASE_URL    = process.env.ERP_BASE_URL    || "";
+const ERP_API_KEY     = process.env.ERP_API_KEY      || "";
+const LMS_BASE_URL    = process.env.LMS_BASE_URL     || "";
+const LMS_API_KEY     = process.env.LMS_API_KEY      || "";
+const ERP_TIMEOUT_MS  = parseInt(process.env.ERP_TIMEOUT_MS  || "10000", 10);
+const ERP_MAX_RETRIES = parseInt(process.env.ERP_MAX_RETRIES || "3",     10);
+
+async function fetchWithTimeout(url, options, timeoutMs = ERP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === "AbortError")
+      throw Object.assign(new Error(`Request timed out after ${timeoutMs}ms: ${url}`), { isTimeout: true });
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function withRetry(fn, maxRetries = ERP_MAX_RETRIES, baseDelayMs = 1000) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      // Retry only transient failures: timeouts, network errors, and 5xx responses
+      const isTransient = err.isTimeout || !err.status || err.status >= 500;
+      if (attempt < maxRetries - 1 && isTransient) {
+        await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, attempt)));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
 
 async function erpPost(endpoint, payload) {
   if (!ERP_BASE_URL) throw new Error("ERP_BASE_URL is not configured");
-  const res = await fetch(`${ERP_BASE_URL}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": ERP_API_KEY,
-    },
-    body: JSON.stringify(payload),
+  return withRetry(async () => {
+    const res = await fetchWithTimeout(`${ERP_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": ERP_API_KEY },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw Object.assign(new Error(`ERP sync failed [${res.status}]: ${text}`), { status: res.status });
+    }
+    return res.json();
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`ERP sync failed [${res.status}]: ${text}`);
-  }
-  return res.json();
 }
 
 async function lmsPost(endpoint, payload) {
   if (!LMS_BASE_URL) throw new Error("LMS_BASE_URL is not configured");
-  const res = await fetch(`${LMS_BASE_URL}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${LMS_API_KEY}`,
-    },
-    body: JSON.stringify(payload),
+  return withRetry(async () => {
+    const res = await fetchWithTimeout(`${LMS_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${LMS_API_KEY}` },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw Object.assign(new Error(`LMS sync failed [${res.status}]: ${text}`), { status: res.status });
+    }
+    return res.json();
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`LMS sync failed [${res.status}]: ${text}`);
-  }
-  return res.json();
 }
 
 /**
@@ -86,11 +116,13 @@ export const syncCIEToERP = async (cieMarks) => {
  */
 export const fetchStudentsFromERP = async (academicYearCode, semesterNumber) => {
   if (!ERP_BASE_URL) throw new Error("ERP_BASE_URL is not configured");
-  const res = await fetch(
-    `${ERP_BASE_URL}/api/v1/students?academicYear=${academicYearCode}&semester=${semesterNumber}`,
-    { headers: { "X-Api-Key": ERP_API_KEY } }
+  const res = await withRetry(() =>
+    fetchWithTimeout(
+      `${ERP_BASE_URL}/api/v1/students?academicYear=${academicYearCode}&semester=${semesterNumber}`,
+      { headers: { "X-Api-Key": ERP_API_KEY } }
+    )
   );
-  if (!res.ok) throw new Error(`ERP fetch failed [${res.status}]`);
+  if (!res.ok) throw Object.assign(new Error(`ERP fetch failed [${res.status}]`), { status: res.status });
   const data = await res.json();
   return (data.students || []).map(s => ({
     rollNumber:  s.rollNo || s.roll_number,
@@ -108,11 +140,13 @@ export const fetchStudentsFromERP = async (academicYearCode, semesterNumber) => 
  */
 export const syncFacultyMappingsFromLMS = async (courseId) => {
   if (!LMS_BASE_URL) throw new Error("LMS_BASE_URL is not configured");
-  const res = await fetch(
-    `${LMS_BASE_URL}/api/courses/${courseId}/instructors`,
-    { headers: { "Authorization": `Bearer ${LMS_API_KEY}` } }
+  const res = await withRetry(() =>
+    fetchWithTimeout(
+      `${LMS_BASE_URL}/api/courses/${courseId}/instructors`,
+      { headers: { "Authorization": `Bearer ${LMS_API_KEY}` } }
+    )
   );
-  if (!res.ok) throw new Error(`LMS fetch failed [${res.status}]`);
+  if (!res.ok) throw Object.assign(new Error(`LMS fetch failed [${res.status}]`), { status: res.status });
   const data = await res.json();
   return (data.instructors || []).map(i => ({
     employeeId: i.staffId || i.employee_id,

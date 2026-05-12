@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/layout/Breadcrumb";
 import {
   cieMarks as cieMarksApi,
@@ -32,6 +33,7 @@ function clamp(val, max) {
 }
 
 const CIEMarksPage = ({ user }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const deptId    = user?.profile?.department?._id || user?.profile?.department;
 
   const [subjects,      setSubjects]      = useState([]);
@@ -39,7 +41,13 @@ const CIEMarksPage = ({ user }) => {
   const [academicYears, setAcYears]       = useState([]);
   const [semesters,     setSemesters]     = useState([]);
 
-  const [selSubject, setSelSubject] = useState("");
+  const [selSubject, setSelSubject] = useState(searchParams.get("subject") || "");
+
+  const handleSubjectChange = (id) => {
+    setSelSubject(id);
+    if (id) setSearchParams({ subject: id }, { replace: true });
+    else setSearchParams({}, { replace: true });
+  };
   const [selAcYear,  setSelAcYear]  = useState("");
   const [selSem,     setSelSem]     = useState("");
 
@@ -194,7 +202,7 @@ const CIEMarksPage = ({ user }) => {
           <div style={{ fontSize:13, color:C.sub }}>Enter IE-1, IE-2 (max 50 each) and LA, DDA, LT (max 10 each) per student. Click Compute to calculate totals.</div>
         </div>
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
-          <select value={selSubject} onChange={e => setSelSubject(e.target.value)}
+          <select value={selSubject} onChange={e => handleSubjectChange(e.target.value)}
             style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, color:C.text, fontFamily:"inherit", background:"#fff", cursor:"pointer", minWidth:200 }}>
             <option value="">Select Subject</option>
             {subjects.map(s => <option key={s._id} value={s._id}>{s.title} ({s.courseCode})</option>)}

@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { Worker, Queue } from "bullmq";
 import mongoose from "mongoose";
 import AnswerBooklet from "../models/AnswerBooklet.js";
 import AIEvaluation from "../models/AIEvaluation.js";
@@ -6,6 +6,7 @@ import ExternalBundle from "../models/ExternalBundle.js";
 import ExternalExamBooklet from "../models/ExternalExamBooklet.js";
 import ExternalAIEvaluation from "../models/ExternalAIEvaluation.js";
 import EvaluationSchema from "../models/EvaluationSchema.js";
+import AuditLog from "../models/AuditLog.js";
 import {
   convertPDFToImages, filterUsefulImages, evaluateWithGemini, cleanupFiles,
 } from "../services/ocr.service.js";
@@ -15,6 +16,8 @@ const REDIS_URL = process.env.REDIS_URL;
 
 async function processBooklet(job) {
   const { bookletId } = job.data;
+  if (!bookletId || !mongoose.Types.ObjectId.isValid(bookletId))
+    throw new Error(`Invalid job payload: bookletId "${bookletId}" is not a valid ObjectId`);
   const booklet = await AnswerBooklet.findById(bookletId).populate("examEvent subject");
   if (!booklet) throw new Error(`Booklet ${bookletId} not found`);
 
@@ -69,6 +72,8 @@ async function processBooklet(job) {
 
 async function processBundle(job) {
   const { bundleId } = job.data;
+  if (!bundleId || !mongoose.Types.ObjectId.isValid(bundleId))
+    throw new Error(`Invalid job payload: bundleId "${bundleId}" is not a valid ObjectId`);
   const bundle = await ExternalBundle.findById(bundleId)
     .populate("booklets").populate("examEvent").populate("subject");
   if (!bundle) throw new Error(`Bundle ${bundleId} not found`);
@@ -135,6 +140,33 @@ async function processBundle(job) {
   return { evaluated: results.length, results };
 }
 
+async function handlePermanentFailure(queue, dlq, job, err, entityName, idField) {
+  console.error(`💀 [${queue}] job ${job.id} permanently failed after ${job.attemptsMade} attempt(s): ${err.message}`);
+  try {
+    await dlq.add("dead-letter", {
+      originalJobId: job.id,
+      queue,
+      data: job.data,
+      failedReason: err.message,
+      failedAt: new Date().toISOString(),
+      attempts: job.attemptsMade,
+    }, { removeOnComplete: 500, removeOnFail: false });
+  } catch {}
+  try {
+    await AuditLog.create({
+      action: "worker_permanent_failure",
+      entity: entityName,
+      details: {
+        queue,
+        jobId: job.id,
+        [idField]: job.data?.[idField],
+        error: err.message,
+        attempts: job.attemptsMade,
+      },
+    });
+  } catch {}
+}
+
 export function startWorkers() {
   if (!REDIS_URL) {
     console.log("ℹ️  REDIS_URL not set — AI evaluation queue workers disabled");
@@ -142,6 +174,9 @@ export function startWorkers() {
   }
 
   const connection = { url: REDIS_URL };
+
+  const bookletDLQ = new Queue("ai-booklet-evaluation-dlq", { connection });
+  const bundleDLQ  = new Queue("ai-bundle-evaluation-dlq",  { connection });
 
   const bookletWorker = new Worker("ai-booklet-evaluation", processBooklet, {
     connection,
@@ -154,10 +189,18 @@ export function startWorkers() {
   });
 
   bookletWorker.on("completed", job => console.log(`✅ Booklet job ${job.id} completed`));
-  bookletWorker.on("failed", (job, err) => console.error(`❌ Booklet job ${job?.id} failed:`, err.message));
+  bookletWorker.on("failed", async (job, err) => {
+    console.error(`❌ Booklet job ${job?.id} failed (attempt ${job?.attemptsMade}/${job?.opts?.attempts ?? 1}):`, err.message);
+    if (job && job.attemptsMade >= (job.opts?.attempts ?? 1))
+      await handlePermanentFailure("ai-booklet-evaluation", bookletDLQ, job, err, "AnswerBooklet", "bookletId");
+  });
 
   bundleWorker.on("completed", job => console.log(`✅ Bundle job ${job.id} completed`));
-  bundleWorker.on("failed", (job, err) => console.error(`❌ Bundle job ${job?.id} failed:`, err.message));
+  bundleWorker.on("failed", async (job, err) => {
+    console.error(`❌ Bundle job ${job?.id} failed (attempt ${job?.attemptsMade}/${job?.opts?.attempts ?? 1}):`, err.message);
+    if (job && job.attemptsMade >= (job.opts?.attempts ?? 1))
+      await handlePermanentFailure("ai-bundle-evaluation", bundleDLQ, job, err, "ExternalBundle", "bundleId");
+  });
 
   console.log("🚀 AI evaluation queue workers started (concurrency: booklet=3, bundle=2)");
 }
